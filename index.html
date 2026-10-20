@@ -167,6 +167,66 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
   display: block; width: 56px; height: 56px; border: 1px solid var(--line); border-radius: 2px;
   background: repeating-conic-gradient(var(--tile) 0 25%, var(--panel) 0 50%) 0 0 / 12px 12px;
 }
+button, label, select { touch-action: manipulation; }
+.dock { display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 860px) {
+  :root { --th: 230px; }
+  body { padding-bottom: 150px; }
+  .panel { padding: 0 16px; }
+  .sec { padding-top: 0; }
+  .sec + .sec { margin-top: 0; }
+  .sec > h2.label { display: flex; justify-content: space-between; align-items: center; min-height: 54px; cursor: pointer; }
+  .sec > h2.label::after { content: "+"; font: 500 20px/1 var(--f-mono); }
+  .sec:not(.closed) > h2.label::after { content: "\2013"; }
+  .sec:not(.closed) { padding-bottom: 18px; }
+  .sec.closed > :not(h2) { display: none; }
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; gap: 8px;
+    background: var(--panel); border-top: 1px solid var(--line);
+    padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+  .dock .status:empty { display: none; }
+  .dock .status { min-height: 0; }
+  .bar { flex-wrap: nowrap; }
+  .bar p { min-width: 0; flex: 1; }
+  .btn.primary { flex: none; }
+  h1 { font-size: 22px; }
+}
+@media (max-width: 860px), (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn.small { min-height: 44px; padding: 8px 14px; }
+  .chip { padding: 10px 16px; font-size: 14px; }
+  .fcard { padding: 12px; }
+  .seg label { padding: 13px 6px; }
+  .linkbtn { padding: 10px 0; font-size: 14px; }
+  .check { min-height: 44px; }
+  .check input { width: 22px; height: 22px; }
+  .row input[type="range"] { height: 32px; }
+  .field select, .field input[type="text"] { min-height: 46px; font-size: 16px; }
+  .drop { min-height: 150px; }
+}
+#settingsBtn, .sheetbar { display: none; }
+@media (max-width: 860px) {
+  body { padding-bottom: 160px; }
+  body.sheet-open { padding-bottom: calc(52vh + 24px); padding-bottom: calc(52dvh + 24px); }
+  #settingsBtn { display: block; }
+  .bar { display: grid; grid-template-columns: 1fr 1.5fr; gap: 8px 10px; }
+  .bar p { grid-column: 1 / -1; }
+  .panel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; height: 52vh; height: 52dvh; overflow: auto;
+    border: 0; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.28);
+    padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    transform: translateY(105%); visibility: hidden; transition: transform 0.22s ease, visibility 0.22s;
+  }
+  body.sheet-open .panel { transform: none; visibility: visible; }
+  .sheetbar {
+    display: flex; position: sticky; top: 0; z-index: 2; justify-content: space-between; align-items: center;
+    margin: 0 calc(-1 * max(16px, env(safe-area-inset-right, 0px))) 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+    padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px));
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+}
+@media (prefers-reduced-motion: reduce) { .panel { transition: none !important; } }
 @media (prefers-reduced-motion: reduce) { .progress i { transition: none; } }
 </style></head><body>
 
@@ -180,7 +240,15 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
   </header>
 
   <div class="app">
-    <aside class="panel" aria-label="Настройки">
+    <aside class="panel" aria-label="Настройки" id="panel">
+      <div class="sheetbar"><strong>Настройки</strong><button class="btn small" id="sheetDone" type="button">Готово</button></div>
+      <section class="sec">
+        <h2 class="label">Наборы</h2>
+        <div class="chips" id="presets"></div>
+        <button class="linkbtn" id="saveMine" type="button">Запомнить текущие настройки как «Мой набор»</button>
+        <p class="hint">Одно нажатие ставит форматы, цвет, значок и знак сразу. Потом можно подправить.</p>
+      </section>
+
       <section class="sec">
         <h2 class="label">Форматы</h2>
         <div id="formats" class="formats"></div>
@@ -198,6 +266,8 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
       <section class="sec">
         <h2 class="label">Цвет</h2>
         <div class="row"><label for="auto">Авто-улучшение</label><output id="o-auto" class="mono"></output><input id="auto" type="range" min="0" max="100" step="1"></div>
+        <div class="row"><label for="sharp">Резкость</label><output id="o-sharp" class="mono"></output><input id="sharp" type="range" min="0" max="100" step="1"></div>
+        <div class="row"><label for="shadow">Тени и света</label><output id="o-shadow" class="mono"></output><input id="shadow" type="range" min="0" max="100" step="1"></div>
         <div class="chips" id="styles" role="group" aria-label="Стиль"></div>
         <div class="row"><label for="bright">Яркость</label><output id="o-bright" class="mono"></output><input id="bright" type="range" min="-50" max="50" step="1"></div>
         <div class="row"><label for="con">Контраст</label><output id="o-con" class="mono"></output><input id="con" type="range" min="-50" max="50" step="1"></div>
@@ -284,12 +354,15 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
         <input class="sr" id="file" type="file" accept="image/*" multiple tabindex="-1">
       </div>
 
-      <div class="bar">
-        <p id="summary" class="mono"></p>
-        <button class="btn primary" id="exportBtn" type="button">Скачать всё (ZIP)</button>
+      <div class="dock">
+        <div class="bar">
+          <p id="summary" class="mono"></p>
+          <button class="btn" id="settingsBtn" type="button">Настройки</button>
+          <button class="btn primary" id="exportBtn" type="button">Скачать всё (ZIP)</button>
+        </div>
+        <div class="progress" id="progress" hidden><i id="progressFill"></i></div>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
       </div>
-      <div class="progress" id="progress" hidden><i id="progressFill"></i></div>
-      <p class="status" id="status" role="status" aria-live="polite"></p>
 
       <div class="list" id="list"></div>
     </main>
@@ -322,7 +395,7 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
   const DEFAULTS = {
     formats: ['post45', 'story', 'post11'], mode: 'fill', auto: 70, style: 'orig',
     bright: 0, con: 0, sat: 0, warm: 0,
-    wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, quality: 92,
+    wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, quality: 92, sharp: 30, shadow: 20,
     logoOn: true, logoPos: 'tr', logoSize: 16, logoOpacity: 100, logoPlate: false,
     mkOn: false, mkPos: 'bl', mkOpacity: 18
   };
@@ -431,11 +504,12 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
     const st = STYLES.find(s => s.id === S.style) || STYLES[0];
     const a = S.auto / 100;
     const lo = p.auto.lo * a, hi = 1 - (1 - p.auto.hi) * a, gam = 1 + (p.auto.gamma - 1) * a;
-    const k = 1 + st.con + S.con / 50 * 0.5, b = S.bright / 50 * 0.18;
+    const k = 1 + st.con + S.con / 50 * 0.5, b = S.bright / 50 * 0.18, sh = S.shadow / 100;
     const lut = new Uint8ClampedArray(256);
     for (let i = 0; i < 256; i++) {
       let v = clamp((i / 255 - lo) / (hi - lo), 0, 1);
       v = Math.pow(v, gam) + b;
+      v = v + sh * 0.9 * v * (1 - v) * (1 - v) - sh * 0.55 * v * v * (1 - v);
       v = (v - 0.5) * k + 0.5;
       if (st.fade) v = st.fade * 0.9 + v * (1 - st.fade * 0.9);
       lut[i] = Math.round(clamp(v, 0, 1) * 255);
@@ -512,6 +586,19 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
     ctx.fillText(text, x, top ? pad : H - pad);
     ctx.restore();
   }
+  function sharpen(ctx, W, H, amt) {
+    if (amt <= 0 || !('filter' in ctx)) return;
+    const r = Math.max(1, Math.round(Math.min(W, H) / 700));
+    const bc = getScratch(2, W, H), bg = bc.getContext('2d', { willReadFrequently: true });
+    bg.filter = 'blur(' + r + 'px)';
+    bg.drawImage(ctx.canvas, 0, 0);
+    bg.filter = 'none';
+    const a = ctx.getImageData(0, 0, W, H), b = bg.getImageData(0, 0, W, H), d = a.data, s = b.data, k = amt * 1.4;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] += k * (d[i] - s[i]); d[i + 1] += k * (d[i + 1] - s[i + 1]); d[i + 2] += k * (d[i + 2] - s[i + 2]);
+    }
+    ctx.putImageData(a, 0, 0);
+  }
   let logo = null; // canvas со значком техникума
   function boxXY(pos, bw, bh, pad, W, H) {
     const x = pos[1] === 'r' ? W - pad - bw : pos[1] === 'c' ? (W - bw) / 2 : pad;
@@ -565,6 +652,7 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
     ctx.clearRect(0, 0, W, H);
     drawBase(ctx, p, full ? p.src : p.small, W, H);
     applyAdjust(ctx, W, H, adj);
+    sharpen(ctx, W, H, S.sharp / 100);
     drawLogo(ctx, W, H);
     drawMedia(ctx, W, H);
     drawMark(ctx, W, H);
@@ -931,6 +1019,74 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
     setLogo(null); restoreLogo(); syncUI();
   }
 
+  /* ---------- наборы и складывание секций на телефоне ---------- */
+  const MINE_KEY = 'fotocex-mine-v1';
+  const PRESET_KEYS = ['formats', 'mode', 'auto', 'style', 'bright', 'con', 'sat', 'warm', 'sharp', 'shadow', 'wmOn', 'wmPos', 'wmSize',
+    'logoOn', 'logoPos', 'logoSize', 'logoOpacity', 'logoPlate', 'mkOn', 'mkPos', 'mkOpacity'];
+  const SETS = [
+    { id: 'heroes', name: 'Герои месяца', vals: { formats: ['post45', 'story'], mode: 'fill', auto: 70, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0, sharp: 35, shadow: 25,
+      logoOn: true, logoPos: 'tr', logoSize: 18, logoOpacity: 100, logoPlate: false, mkOn: true, mkPos: 'bl', mkOpacity: 18 } },
+    { id: 'garage', name: 'Гараж', vals: { formats: ['story', 'post11'], mode: 'fill', auto: 60, style: 'film', bright: 0, con: 10, sat: 0, warm: 0, sharp: 45, shadow: 10,
+      logoOn: false, mkOn: false } },
+    { id: 'kam', name: 'Камчатка', vals: { formats: ['post45', 'wide', 'story'], mode: 'fill', auto: 80, style: 'vivid', bright: 0, con: 0, sat: 8, warm: 0, sharp: 45, shadow: 35,
+      logoOn: false, mkOn: false } }
+  ];
+  function syncAll() {
+    for (const k of ['auto', 'sharp', 'shadow', 'bright', 'con', 'sat', 'warm', 'wmSize', 'quality', 'logoSize', 'logoOpacity', 'mkOpacity', 'wmPos', 'logoPos', 'mkPos']) $(k).value = S[k];
+    for (const k of ['wmOn', 'logoOn', 'logoPlate', 'mkOn']) $(k).checked = S[k];
+    $('wmText').value = S.wmText;
+    buildFormats(); syncUI();
+  }
+  function applySet(name, vals) {
+    for (const k of Object.keys(vals)) {
+      if (!PRESET_KEYS.includes(k) || typeof vals[k] !== typeof DEFAULTS[k]) continue;
+      S[k] = Array.isArray(vals[k]) ? vals[k].filter(id => PRESETS.some(p => p.id === id)) : vals[k];
+    }
+    syncAll(); saveSettings(); buildList();
+    document.body.classList.remove('sheet-open');
+    setStatus('Набор «' + name + '» применён.');
+  }
+  function mineLoad() { try { const r = localStorage.getItem(MINE_KEY); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+  function buildPresets() {
+    const box = $('presets'); box.textContent = '';
+    const items = SETS.slice(), mine = mineLoad();
+    if (mine) items.push({ id: 'mine', name: 'Мой набор', vals: mine });
+    for (const s of items) box.append(el('button', { class: 'chip', type: 'button', text: s.name, onclick: () => applySet(s.name, s.vals) }));
+  }
+  function initFold() {
+    const mq = window.matchMedia('(max-width: 860px)');
+    document.querySelectorAll('.panel .sec').forEach((s, i) => {
+      const h = s.querySelector('h2');
+      h.setAttribute('role', 'button'); h.tabIndex = 0;
+      const upd = () => h.setAttribute('aria-expanded', String(!(mq.matches && s.classList.contains('closed'))));
+      const flip = () => { s.classList.toggle('closed'); upd(); };
+      h.addEventListener('click', flip);
+      h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+      if (i > 0 && mq.matches) s.classList.add('closed');
+      upd();
+    });
+  }
+  function initSets() {
+    buildPresets();
+    $('saveMine').addEventListener('click', () => {
+      const o = {};
+      for (const k of PRESET_KEYS) o[k] = Array.isArray(S[k]) ? S[k].slice() : S[k];
+      try { localStorage.setItem(MINE_KEY, JSON.stringify(o)); setStatus('Настройки запомнены как «Мой набор».'); }
+      catch (e) { setStatus('Не получилось запомнить: память браузера недоступна.', true); }
+      buildPresets();
+    });
+    initFold();
+    const closeSheet = () => document.body.classList.remove('sheet-open');
+    $('settingsBtn').addEventListener('click', () => {
+      document.body.classList.add('sheet-open');
+      const c = document.querySelector('.tiles');
+      if (c) c.scrollIntoView({ block: 'start' });
+    });
+    $('sheetDone').addEventListener('click', closeSheet);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+    window.matchMedia('(max-width: 860px)').addEventListener('change', closeSheet);
+  }
+
   /* ---------- панель настроек ---------- */
   function buildFormats() {
     const box = $('formats'); box.textContent = '';
@@ -973,6 +1129,7 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
     $('o-sat').textContent = signed(S.sat); $('o-warm').textContent = signed(S.warm);
     $('o-wmSize').textContent = S.wmSize + '%'; $('o-quality').textContent = S.quality;
     $('o-logoSize').textContent = S.logoSize + '%'; $('o-logoOpacity').textContent = S.logoOpacity + '%'; $('o-mkOpacity').textContent = S.mkOpacity + '%';
+    $('o-sharp').textContent = S.sharp + '%'; $('o-shadow').textContent = S.shadow + '%';
   }
   function bindRange(id, key) {
     const n = $(id); n.value = S[key];
@@ -981,11 +1138,11 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
   function initPanel() {
     buildFormats(); buildStyles();
     document.querySelectorAll('#mode input').forEach(i => i.addEventListener('change', () => { S.mode = i.value; syncUI(); saveSettings(); schedule(null); }));
-    bindRange('auto', 'auto'); bindRange('bright', 'bright'); bindRange('con', 'con'); bindRange('sat', 'sat'); bindRange('warm', 'warm');
+    bindRange('auto', 'auto'); bindRange('sharp', 'sharp'); bindRange('shadow', 'shadow'); bindRange('bright', 'bright'); bindRange('con', 'con'); bindRange('sat', 'sat'); bindRange('warm', 'warm');
     bindRange('wmSize', 'wmSize'); bindRange('quality', 'quality');
     $('resetColor').addEventListener('click', () => {
-      Object.assign(S, { auto: DEFAULTS.auto, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0 });
-      for (const [id, k] of [['auto', 'auto'], ['bright', 'bright'], ['con', 'con'], ['sat', 'sat'], ['warm', 'warm']]) $(id).value = S[k];
+      Object.assign(S, { auto: DEFAULTS.auto, sharp: DEFAULTS.sharp, shadow: DEFAULTS.shadow, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0 });
+      for (const k of ['auto', 'sharp', 'shadow', 'bright', 'con', 'sat', 'warm']) $(k).value = S[k];
       syncUI(); saveSettings(); schedule(null);
     });
     $('wmOn').checked = S.wmOn; $('wmText').value = S.wmText; $('wmPos').value = S.wmPos;
@@ -1016,6 +1173,7 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 
   initPanel();
   initBrand();
+  initSets();
   seedSample();
   buildList();
 
