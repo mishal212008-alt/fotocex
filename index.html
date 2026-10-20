@@ -226,6 +226,42 @@ button, label, select { touch-action: manipulation; }
     background: var(--panel); border-bottom: 1px solid var(--line);
   }
 }
+:root { --ov-bg: #0E1013; --ov-fg: #F2F4F7; --ov-line: #3A404B; }
+.btn.quick { width: 100%; background: var(--ink); color: var(--panel); border-color: var(--ink); padding: 14px 18px; font-size: 16px; }
+.btn.quick:hover:not(:disabled) { background: var(--ink); opacity: 0.9; }
+.quickhint { margin: -6px 0 0; }
+body.crop-open { overflow: hidden; }
+.cropper { position: fixed; inset: 0; z-index: 80; display: flex; flex-direction: column; background: var(--ov-bg); color: var(--ov-fg); }
+.cropbar {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  border-bottom: 1px solid var(--ov-line);
+}
+.cropper .btn { background: transparent; color: var(--ov-fg); border-color: var(--ov-fg); }
+.cropper .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+.cropper .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.cropstage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px; overflow: hidden; touch-action: none; }
+.cropwrap { position: relative; flex: none; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.cropwrap canvas { display: block; }
+.cropbox {
+  position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58); cursor: move; touch-action: none;
+  background-image:
+    linear-gradient(to right, transparent calc(33.33% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(33.33% + 0.5px), transparent 0 calc(66.66% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(66.66% + 0.5px), transparent 0),
+    linear-gradient(to bottom, transparent calc(33.33% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(33.33% + 0.5px), transparent 0 calc(66.66% - 0.5px), rgba(255, 255, 255, 0.45) 0 calc(66.66% + 0.5px), transparent 0);
+}
+.hd { position: absolute; background: var(--accent); pointer-events: none; }
+.hd.nw, .hd.ne, .hd.sw, .hd.se { width: 16px; height: 16px; }
+.hd.nw { left: -8px; top: -8px; } .hd.ne { right: -8px; top: -8px; } .hd.sw { left: -8px; bottom: -8px; } .hd.se { right: -8px; bottom: -8px; }
+.hd.n, .hd.s { left: calc(50% - 16px); width: 32px; height: 6px; } .hd.n { top: -4px; } .hd.s { bottom: -4px; }
+.hd.w, .hd.e { top: calc(50% - 16px); height: 32px; width: 6px; } .hd.w { left: -4px; } .hd.e { right: -4px; }
+.croptools {
+  display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--ov-line);
+  padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.cropper .chip { background: transparent; color: var(--ov-fg); border-color: var(--ov-line); }
+.cropper .chip[aria-pressed="true"] { background: var(--ov-fg); color: var(--ov-bg); border-color: var(--ov-fg); }
+.croprow { display: flex; gap: 10px; }
+.croprow .btn { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .panel { transition: none !important; } }
 @media (prefers-reduced-motion: reduce) { .progress i { transition: none; } }
 </style></head><body>
@@ -354,6 +390,9 @@ button, label, select { touch-action: manipulation; }
         <input class="sr" id="file" type="file" accept="image/*" multiple tabindex="-1">
       </div>
 
+      <button class="btn quick" id="quickBtn" type="button">Быстрый монтаж</button>
+      <p class="hint quickhint">Одна кнопка: убирает чёрные и белые полосы по краям, ставит стиль ККТ · ВК, подтягивает цвет, резкость и тени.</p>
+
       <div class="dock">
         <div class="bar">
           <p id="summary" class="mono"></p>
@@ -366,6 +405,24 @@ button, label, select { touch-action: manipulation; }
 
       <div class="list" id="list"></div>
     </main>
+  </div>
+</div>
+
+<div class="cropper" id="cropper" hidden role="dialog" aria-modal="true" aria-label="Обрезка фото">
+  <div class="cropbar">
+    <button class="btn small" id="cropCancel" type="button">Отмена</button>
+    <strong>Обрезка</strong>
+    <button class="btn small primary" id="cropApply" type="button">Готово</button>
+  </div>
+  <div class="cropstage" id="cropStage">
+    <div class="cropwrap" id="cropWrap">
+      <canvas id="cropCanvas"></canvas>
+      <div class="cropbox" id="cropBox"><i class="hd nw"></i><i class="hd ne"></i><i class="hd sw"></i><i class="hd se"></i><i class="hd n"></i><i class="hd s"></i><i class="hd w"></i><i class="hd e"></i></div>
+    </div>
+  </div>
+  <div class="croptools">
+    <div class="chips" id="cropRatios" role="group" aria-label="Пропорции"></div>
+    <div class="croprow"><button class="btn small" id="cropRotate" type="button">Повернуть</button><button class="btn small" id="cropReset" type="button">Сбросить</button></div>
   </div>
 </div>
 
@@ -714,6 +771,8 @@ button, label, select { touch-action: manipulation; }
         el('h3', { text: String(i + 1).padStart(2, '0') + '  ' + p.name }),
         el('span', { class: 'mono', text: p.w + '×' + p.h + ' px' }),
         orig,
+        p.sample ? null : el('button', { class: 'btn small', type: 'button', text: 'Обрезать', onclick: () => openCrop(p) }),
+        p.cropped ? el('button', { class: 'linkbtn', type: 'button', text: 'Вернуть оригинал', onclick: () => restoreOriginal(p) }) : null,
         el('button', { class: 'linkbtn', type: 'button', text: 'Вернуть автоцентр', onclick: () => { p.focus = { x: p.autoFocus.x, y: p.autoFocus.y }; p.manual = false; placeXhair(p); schedule(p); } }),
         el('button', { class: 'linkbtn', type: 'button', text: 'Убрать фото', onclick: () => removePhoto(p) })
       );
@@ -744,12 +803,13 @@ button, label, select { touch-action: manipulation; }
     else if (!real) summaryEl.textContent = 'Пока виден пример';
     else summaryEl.textContent = real + ' ' + plural(real, ['фото', 'фото', 'фото']) + ' × ' + nf + ' ' + plural(nf, ['формат', 'формата', 'форматов']) + ' = ' + frames + ' ' + plural(frames, ['кадр', 'кадра', 'кадров']);
     exportBtn.disabled = busy || !real || !nf;
+    $('quickBtn').disabled = busy || !real;
     document.querySelectorAll('.save').forEach(b => { b.disabled = busy; });
   }
 
   function removePhoto(p) {
     photos = photos.filter(x => x !== p);
-    try { if (p.src && p.src.close) p.src.close(); } catch (e) { /* ignore */ }
+    try { if (p.src && p.src.close) p.src.close(); if (p.orig && p.orig.close) p.orig.close(); } catch (e) { /* ignore */ }
     buildList();
   }
 
@@ -769,7 +829,7 @@ button, label, select { touch-action: manipulation; }
       try {
         const bmp = await decode(files[i]);
         if (added === 0) photos = photos.filter(p => { if (p.sample) return false; return true; });
-        const p = { id: nextId++, name: files[i].name || 'foto', src: bmp, w: bmp.width, h: bmp.height, sample: false };
+        const p = { id: nextId++, name: files[i].name || 'foto', src: bmp, orig: bmp, cropped: false, w: bmp.width, h: bmp.height, sample: false };
         p.small = makeSmall(bmp);
         analyze(p);
         photos.push(p);
@@ -1019,6 +1079,165 @@ button, label, select { touch-action: manipulation; }
     setLogo(null); restoreLogo(); syncUI();
   }
 
+  /* ---------- обрезка и быстрый монтаж ---------- */
+  function cropPhoto(p, src, sx, sy, sw, sh) {
+    sx = Math.max(0, Math.round(sx)); sy = Math.max(0, Math.round(sy));
+    sw = Math.max(8, Math.min(Math.round(sw), src.width - sx)); sh = Math.max(8, Math.min(Math.round(sh), src.height - sy));
+    const c = document.createElement('canvas'); c.width = sw; c.height = sh;
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+    p.src = c; p.w = sw; p.h = sh; p.small = makeSmall(c); analyze(p); p.cropped = true;
+  }
+  function restoreOriginal(p) {
+    if (!p.orig) return;
+    p.src = p.orig; p.w = p.orig.width; p.h = p.orig.height; p.small = makeSmall(p.orig); analyze(p); p.cropped = false;
+    buildList();
+  }
+  function rotated(src, rot) {
+    if (!rot) return src;
+    const sw = src.width, sh = src.height, swap = rot % 180 !== 0;
+    const c = document.createElement('canvas'); c.width = swap ? sh : sw; c.height = swap ? sw : sh;
+    const g = c.getContext('2d'); g.translate(c.width / 2, c.height / 2); g.rotate(rot * Math.PI / 180); g.drawImage(src, -sw / 2, -sh / 2);
+    return c;
+  }
+  const CR = { p: null, rot: 0, work: null, W: 0, H: 0, s: 1, box: { x: 0, y: 0, w: 0, h: 0 }, ratio: 0, drag: null };
+  const RATIOS = [['Свободно', 0], ['1:1', 1], ['4:5', 4 / 5], ['3:4', 3 / 4], ['9:16', 9 / 16], ['16:9', 16 / 9]];
+  function drawBox() {
+    const b = CR.box, n = $('cropBox');
+    n.style.left = b.x + 'px'; n.style.top = b.y + 'px'; n.style.width = b.w + 'px'; n.style.height = b.h + 'px';
+  }
+  function layoutCrop(keep) {
+    const work = CR.work, stage = $('cropStage'), oldW = CR.W;
+    const aw = Math.max(60, stage.clientWidth - 24), ah = Math.max(60, stage.clientHeight - 24);
+    const s = Math.min(aw / work.width, ah / work.height, 3);
+    CR.s = s; CR.W = Math.max(1, Math.round(work.width * s)); CR.H = Math.max(1, Math.round(work.height * s));
+    const cv = $('cropCanvas'); cv.width = CR.W; cv.height = CR.H;
+    const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(work, 0, 0, CR.W, CR.H);
+    const wrap = $('cropWrap'); wrap.style.width = CR.W + 'px'; wrap.style.height = CR.H + 'px';
+    if (keep && oldW) { const f = CR.W / oldW, b = CR.box; CR.box = { x: b.x * f, y: b.y * f, w: b.w * f, h: b.h * f }; }
+    else CR.box = { x: 0, y: 0, w: CR.W, h: CR.H };
+    drawBox();
+  }
+  function fitRatio(r) {
+    CR.ratio = r;
+    document.querySelectorAll('#cropRatios .chip').forEach(c => c.setAttribute('aria-pressed', String(parseFloat(c.dataset.r) === r)));
+    if (!r) return;
+    const b = CR.box, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    let w = Math.min(CR.W, CR.H * r), h = w / r;
+    if (b.w < w && b.h < h) { w = Math.min(w, b.w); h = w / r; if (h > b.h) { h = b.h; w = h * r; } }
+    CR.box = { x: clamp(cx - w / 2, 0, CR.W - w), y: clamp(cy - h / 2, 0, CR.H - h), w, h };
+    drawBox();
+  }
+  function openCrop(p) {
+    CR.p = p; CR.rot = 0; CR.work = p.orig || p.src; CR.ratio = 0; CR.W = 0;
+    const box = $('cropRatios'); box.textContent = '';
+    for (const [name, r] of RATIOS) box.append(el('button', { class: 'chip', type: 'button', text: name, 'data-r': String(r), 'aria-pressed': String(r === 0), onclick: () => fitRatio(r) }));
+    $('cropper').hidden = false; document.body.classList.add('crop-open');
+    requestAnimationFrame(() => layoutCrop(false));
+  }
+  function closeCrop() { $('cropper').hidden = true; document.body.classList.remove('crop-open'); CR.work = null; CR.p = null; CR.drag = null; }
+  function applyCrop() {
+    const p = CR.p, work = CR.work, b = CR.box;
+    if (!p || !work) { closeCrop(); return; }
+    const k = 1 / CR.s, full = b.w >= CR.W - 1 && b.h >= CR.H - 1 && !CR.rot;
+    closeCrop();
+    if (full) { if (p.cropped) restoreOriginal(p); return; }
+    cropPhoto(p, work, b.x * k, b.y * k, b.w * k, b.h * k);
+    buildList();
+    setStatus('Фото обрезано. Кадры пересчитаны.');
+  }
+  function boxDown(e) {
+    const n = $('cropBox'), r = n.getBoundingClientRect(), b = CR.box;
+    const lx = e.clientX - r.left, ly = e.clientY - r.top, z = Math.min(30, Math.min(b.w, b.h) / 3);
+    const m = { l: lx < z, r: lx > b.w - z, t: ly < z, b: ly > b.h - z };
+    CR.drag = { m, move: !(m.l || m.r || m.t || m.b), sx: e.clientX, sy: e.clientY, b0: { x: b.x, y: b.y, w: b.w, h: b.h }, id: e.pointerId };
+    try { n.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
+    e.preventDefault();
+  }
+  function boxMove(e) {
+    const d = CR.drag;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.sx, dy = e.clientY - d.sy, b0 = d.b0, W = CR.W, H = CR.H, MIN = 28;
+    if (d.move) {
+      CR.box = { x: clamp(b0.x + dx, 0, W - b0.w), y: clamp(b0.y + dy, 0, H - b0.h), w: b0.w, h: b0.h };
+    } else if (!CR.ratio) {
+      let x0 = b0.x, y0 = b0.y, x1 = b0.x + b0.w, y1 = b0.y + b0.h;
+      if (d.m.l) x0 = clamp(x0 + dx, 0, x1 - MIN);
+      if (d.m.r) x1 = clamp(x1 + dx, x0 + MIN, W);
+      if (d.m.t) y0 = clamp(y0 + dy, 0, y1 - MIN);
+      if (d.m.b) y1 = clamp(y1 + dy, y0 + MIN, H);
+      CR.box = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    } else {
+      const r = CR.ratio, cx = b0.x + b0.w / 2, cy = b0.y + b0.h / 2, wr = $('cropWrap').getBoundingClientRect();
+      const px = e.clientX - wr.left, py = e.clientY - wr.top;
+      let hw = Math.max(Math.abs(px - cx), r * Math.abs(py - cy));
+      hw = Math.min(hw, cx, W - cx, r * cy, r * (H - cy));
+      hw = Math.max(hw, 14, 14 * r);
+      CR.box = { x: cx - hw, y: cy - hw / r, w: 2 * hw, h: 2 * hw / r };
+    }
+    drawBox();
+  }
+  function initCrop() {
+    const n = $('cropBox');
+    n.addEventListener('pointerdown', boxDown);
+    n.addEventListener('pointermove', boxMove);
+    const end = () => { CR.drag = null; };
+    n.addEventListener('pointerup', end); n.addEventListener('pointercancel', end);
+    $('cropCancel').addEventListener('click', closeCrop);
+    $('cropApply').addEventListener('click', applyCrop);
+    $('cropReset').addEventListener('click', () => { if (CR.work) { CR.ratio = 0; fitRatio(0); layoutCrop(false); } });
+    $('cropRotate').addEventListener('click', () => {
+      if (!CR.p) return;
+      CR.rot = (CR.rot + 90) % 360; CR.work = rotated(CR.p.orig || CR.p.src, CR.rot); layoutCrop(false); fitRatio(CR.ratio);
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('cropper').hidden) closeCrop(); });
+    window.addEventListener('resize', () => { if (!$('cropper').hidden && CR.work) layoutCrop(true); });
+    $('quickBtn').addEventListener('click', quickMontage);
+  }
+  // ищет сплошные чёрные или белые полосы по краям кадра (скриншоты, поля)
+  function findTrim(p) {
+    const c = p.small, W = c.width, H = c.height;
+    const d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+    const bar = (start, count, stride) => {
+      let mn = 255, mx = 0, sum = 0;
+      for (let i = 0; i < count; i++) {
+        const o = start + i * stride, v = 0.299 * d[o] + 0.587 * d[o + 1] + 0.114 * d[o + 2];
+        if (v < mn) mn = v; if (v > mx) mx = v; sum += v;
+      }
+      const m = sum / count;
+      return mx - mn < 18 && (m < 24 || m > 236);
+    };
+    const row = y => bar(y * W * 4, W, 4), col = x => bar(x * 4, H, W * 4);
+    let t = 0, b = 0, l = 0, r = 0;
+    while (t < H * 0.25 && row(t)) t++;
+    while (b < H * 0.25 && row(H - 1 - b)) b++;
+    while (l < W * 0.25 && col(l)) l++;
+    while (r < W * 0.25 && col(W - 1 - r)) r++;
+    return { l: l ? (l + 1) / W : 0, r: r ? (r + 1) / W : 0, t: t ? (t + 1) / H : 0, b: b ? (b + 1) / H : 0 };
+  }
+  async function quickMontage() {
+    const real = photos.filter(x => !x.sample);
+    if (!real.length) { setStatus('Сначала добавь фото.', true); return; }
+    busy = true; refresh();
+    setStatus('Обрабатываю…');
+    await new Promise(r => setTimeout(r, 30));
+    let trimmed = 0;
+    try {
+      for (const p of real) {
+        const tr = findTrim(p);
+        if (tr.l + tr.r > 0.02 || tr.t + tr.b > 0.02) {
+          const w = p.src.width, h = p.src.height;
+          cropPhoto(p, p.src, tr.l * w, tr.t * h, (1 - tr.l - tr.r) * w, (1 - tr.t - tr.b) * h);
+          trimmed++;
+        } else { p.focus = { x: p.autoFocus.x, y: p.autoFocus.y }; p.manual = false; }
+      }
+    } catch (e) { /* обрезка полос не получилась, остальная обработка продолжится */ }
+    busy = false;
+    applySet(SETS[0].name, SETS[0].vals);
+    const n = real.length;
+    setStatus('Быстрый монтаж готов: ' + n + ' ' + plural(n, ['фото', 'фото', 'фото']) + (trimmed ? ', убраны полосы у ' + trimmed : '') + '. Проверь кадры и нажми «Скачать всё».');
+  }
+
   /* ---------- наборы и складывание секций на телефоне ---------- */
   const MINE_KEY = 'fotocex-mine-v1';
   const PRESET_KEYS = ['formats', 'mode', 'auto', 'style', 'bright', 'con', 'sat', 'warm', 'sharp', 'shadow', 'wmOn', 'wmPos', 'wmSize',
@@ -1072,6 +1291,7 @@ button, label, select { touch-action: manipulation; }
       buildPresets();
     });
     initFold();
+    initCrop();
     const closeSheet = () => document.body.classList.remove('sheet-open');
     $('settingsBtn').addEventListener('click', () => {
       document.body.classList.add('sheet-open');
