@@ -246,7 +246,7 @@ button, label, select { touch-action: manipulation; }
         <h2 class="label">Наборы</h2>
         <div class="chips" id="presets"></div>
         <button class="linkbtn" id="saveMine" type="button">Запомнить текущие настройки как «Мой набор»</button>
-        <p class="hint">Одно нажатие ставит форматы, цвет, значок и знак сразу. Потом можно подправить.</p>
+        <p class="hint">Единый стиль ККТ для ВК: значок, знак «МЕДИА ККТ», цвет и форматы. Он стоит по умолчанию. Нажми «ККТ · ВК», чтобы вернуть его после правок.</p>
       </section>
 
       <section class="sec">
@@ -390,14 +390,14 @@ button, label, select { touch-action: manipulation; }
   ];
   const PREVIEW_H = 420;
   const MAX_PHOTOS = 60;
-  const STORE_KEY = 'fotocex-settings-v1';
+  const STORE_KEY = 'fotocex-settings-v2';
 
   const DEFAULTS = {
-    formats: ['post45', 'story', 'post11'], mode: 'fill', auto: 70, style: 'orig',
+    formats: ['post45', 'story'], mode: 'fill', auto: 70, style: 'orig',
     bright: 0, con: 0, sat: 0, warm: 0,
-    wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, quality: 92, sharp: 30, shadow: 20,
-    logoOn: true, logoPos: 'tr', logoSize: 16, logoOpacity: 100, logoPlate: false,
-    mkOn: false, mkPos: 'bl', mkOpacity: 18
+    wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, quality: 92, sharp: 35, shadow: 25,
+    logoOn: true, logoPos: 'tr', logoSize: 18, logoOpacity: 100, logoPlate: false,
+    mkOn: true, mkPos: 'bl', mkOpacity: 18
   };
   const S = Object.assign({}, DEFAULTS, { formats: DEFAULTS.formats.slice() });
 
@@ -1024,12 +1024,8 @@ button, label, select { touch-action: manipulation; }
   const PRESET_KEYS = ['formats', 'mode', 'auto', 'style', 'bright', 'con', 'sat', 'warm', 'sharp', 'shadow', 'wmOn', 'wmPos', 'wmSize',
     'logoOn', 'logoPos', 'logoSize', 'logoOpacity', 'logoPlate', 'mkOn', 'mkPos', 'mkOpacity'];
   const SETS = [
-    { id: 'heroes', name: 'Герои месяца', vals: { formats: ['post45', 'story'], mode: 'fill', auto: 70, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0, sharp: 35, shadow: 25,
-      logoOn: true, logoPos: 'tr', logoSize: 18, logoOpacity: 100, logoPlate: false, mkOn: true, mkPos: 'bl', mkOpacity: 18 } },
-    { id: 'garage', name: 'Гараж', vals: { formats: ['story', 'post11'], mode: 'fill', auto: 60, style: 'film', bright: 0, con: 10, sat: 0, warm: 0, sharp: 45, shadow: 10,
-      logoOn: false, mkOn: false } },
-    { id: 'kam', name: 'Камчатка', vals: { formats: ['post45', 'wide', 'story'], mode: 'fill', auto: 80, style: 'vivid', bright: 0, con: 0, sat: 8, warm: 0, sharp: 45, shadow: 35,
-      logoOn: false, mkOn: false } }
+    { id: 'kkt', name: 'ККТ · ВК', vals: { formats: ['post45', 'story'], mode: 'fill', auto: 70, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0, sharp: 35, shadow: 25,
+      logoOn: true, logoPos: 'tr', logoSize: 18, logoOpacity: 100, logoPlate: false, mkOn: true, mkPos: 'bl', mkOpacity: 18 } }
   ];
   function syncAll() {
     for (const k of ['auto', 'sharp', 'shadow', 'bright', 'con', 'sat', 'warm', 'wmSize', 'quality', 'logoSize', 'logoOpacity', 'mkOpacity', 'wmPos', 'logoPos', 'mkPos']) $(k).value = S[k];
