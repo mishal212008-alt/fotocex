@@ -556,6 +556,29 @@ body.crop-open { overflow: hidden; }
     p.autoFocus = { x: clamp(0.7 * cx + 0.15, 0.12, 0.88), y: clamp(0.7 * cy + 0.3 * 0.42, 0.12, 0.88) };
     p.focus = { x: p.autoFocus.x, y: p.autoFocus.y };
     p.manual = false;
+    p.faceP = detectFaces(p);
+  }
+  // поиск лиц встроенной функцией Chrome (если есть); иначе остаётся центр по контрасту
+  let faceDet = null;
+  async function detectFaces(p) {
+    try {
+      if (!('FaceDetector' in window)) return;
+      if (!faceDet) faceDet = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 12 });
+      const faces = await faceDet.detect(p.small);
+      if (!faces.length) return;
+      const W = p.small.width, H = p.small.height;
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1, maxH = 0;
+      for (const f of faces) {
+        const b = f.boundingBox;
+        if (b.width < W * 0.03) continue;
+        x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height); maxH = Math.max(maxH, b.height);
+      }
+      if (x1 < 0) return;
+      const fx = clamp((x0 + x1) / 2 / W, 0.05, 0.95);
+      const fy = clamp(((y0 + y1) / 2 + (faces.length === 1 ? 0.6 * maxH : 0.25 * maxH)) / H, 0.08, 0.92);
+      p.autoFocus = { x: fx, y: fy }; p.hasFaces = faces.length;
+      if (!p.manual) { p.focus = { x: fx, y: fy }; if (p.xh) placeXhair(p); if (p.tiles) schedule(p); }
+    } catch (e) { /* функции нет или она не сработала */ }
   }
 
   /* ---------- цвет ---------- */
@@ -787,7 +810,7 @@ body.crop-open { overflow: hidden; }
         const canvas = el('canvas');
         const cap = el('figcaption', null, el('span', { class: 'mono', text: pr.ratio + ' · ' + pr.w + '×' + pr.h }));
         if (!p.sample) {
-          const b = el('button', { class: 'btn small save', type: 'button', text: 'Сохранить', onclick: () => saveOne(p, pr) });
+          const b = el('button', { class: 'btn small save', type: 'button', text: 'В галерею', onclick: () => saveOne(p, pr) });
           cap.append(b);
         }
         tiles.append(el('figure', { class: 'tile', style: '--ar:' + (pr.w / pr.h) }, canvas, cap));
@@ -875,7 +898,7 @@ body.crop-open { overflow: hidden; }
       const blob = await toBlob(c);
       c.width = c.height = 0;
       await saveFile(baseName(p) + '_' + preset.id + '.jpg', blob);
-      setStatus('Файл сохранён.');
+      setStatus(dl ? 'Файл сохранён.' : 'Сохранено в «Загрузки». В галерее ищи альбом Download.');
     } catch (e) { setStatus(errText(e), !(e && e.code === 'declined')); }
     busy = false; refresh();
   }
@@ -1278,6 +1301,8 @@ body.crop-open { overflow: hidden; }
         } else { p.focus = { x: p.autoFocus.x, y: p.autoFocus.y }; p.manual = false; }
       }
     } catch (e) { /* обрезка полос не получилась, остальная обработка продолжится */ }
+    await Promise.all(real.map(p => p.faceP));
+    for (const p of real) if (!p.manual && !(p.cropped && p.src !== p.orig && false)) p.focus = { x: p.autoFocus.x, y: p.autoFocus.y };
     busy = false;
     applySet(SETS[0].name, SETS[0].vals);
     const n = real.length;
