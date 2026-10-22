@@ -270,6 +270,10 @@ body.crop-open { overflow: hidden; }
 .cropper .chip { background: transparent; color: var(--ov-fg); border-color: var(--ov-line); }
 .cropper .chip[aria-pressed="true"] { background: var(--ov-fg); color: var(--ov-bg); border-color: var(--ov-fg); }
 .croprow { display: flex; gap: 10px; }
+.rtring { position: absolute; pointer-events: none; border: 2px solid var(--accent); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.5); transform: translate(-50%, -50%); display: none; }
+.rthint { margin: 0; font-size: 13px; color: #B5BBC6; }
+.toolrow { display: flex; gap: 8px; }
+.toolrow .btn { flex: 1; }
 .croprow .btn { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .panel { transition: none !important; } }
 @media (prefers-reduced-motion: reduce) { .progress i { transition: none; } }
@@ -281,7 +285,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 11.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 12.</p>
   </header>
 
   <div class="app">
@@ -312,6 +316,7 @@ body.crop-open { overflow: hidden; }
         <h2 class="label">Цвет</h2>
         <div class="row"><label for="auto">Авто-улучшение</label><output id="o-auto" class="mono"></output><input id="auto" type="range" min="0" max="100" step="1"></div>
         <div class="row"><label for="sharp">Резкость</label><output id="o-sharp" class="mono"></output><input id="sharp" type="range" min="0" max="100" step="1"></div>
+        <div class="row"><label for="nature">Небо и зелень</label><output id="o-nature" class="mono"></output><input id="nature" type="range" min="0" max="100" step="1"></div>
         <div class="row"><label for="denoise">Шум в тёмном</label><output id="o-denoise" class="mono"></output><input id="denoise" type="range" min="0" max="100" step="1"></div>
         <div class="row"><label for="shadow">Тени и света</label><output id="o-shadow" class="mono"></output><input id="shadow" type="range" min="0" max="100" step="1"></div>
         <div class="chips" id="styles" role="group" aria-label="Стиль"></div>
@@ -424,6 +429,26 @@ body.crop-open { overflow: hidden; }
   </div>
 </div>
 
+<div class="cropper" id="retouch" hidden role="dialog" aria-modal="true" aria-label="Ретушь фото">
+  <div class="cropbar">
+    <button class="btn small" id="rtCancel" type="button">Отмена</button>
+    <strong>Ретушь</strong>
+    <button class="btn small primary" id="rtApply" type="button">Готово</button>
+  </div>
+  <div class="cropstage" id="rtStage">
+    <div class="cropwrap" id="rtWrap">
+      <canvas id="rtCanvas"></canvas>
+      <i class="rtring" id="rtRing"></i>
+    </div>
+  </div>
+  <div class="croptools">
+    <div class="chips" id="rtTools" role="group" aria-label="Инструмент"></div>
+    <div class="chips" id="rtSizes" role="group" aria-label="Размер кисти"></div>
+    <p class="rthint" id="rtHint"></p>
+    <div class="croprow"><button class="btn small" id="rtUndo" type="button">Отменить шаг</button><button class="btn small" id="rtClear" type="button">Сбросить всё</button></div>
+  </div>
+</div>
+
 <div class="cropper" id="cropper" hidden role="dialog" aria-modal="true" aria-label="Обрезка фото">
   <div class="cropbar">
     <button class="btn small" id="cropCancel" type="button">Отмена</button>
@@ -468,7 +493,7 @@ body.crop-open { overflow: hidden; }
   const DEFAULTS = {
     formats: ['post45', 'story'], mode: 'fill', auto: 70, style: 'orig',
     bright: 0, con: 0, sat: 0, warm: 0,
-    wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, quality: 92, sharp: 35, shadow: 25, denoise: 25,
+    wmOn: false, wmText: '', wmPos: 'br', wmSize: 4, quality: 92, sharp: 35, shadow: 25, denoise: 25, nature: 15,
     logoOn: true, logoPos: 'tr', logoSize: 18, logoOpacity: 100, logoPlate: false,
     mkOn: true, mkPos: 'bl', mkOpacity: 18
   };
@@ -619,16 +644,22 @@ body.crop-open { overflow: hidden; }
       if (st.fade) v = st.fade * 0.9 + v * (1 - st.fade * 0.9);
       lut[i] = Math.round(clamp(v, 0, 1) * 255);
     }
-    return { lut, sat: st.bw ? 0 : st.sat * (1 + S.sat / 50 * 0.6), warm: (st.warm + S.warm / 50 * 0.25) * 60 };
+    return { lut, sat: st.bw ? 0 : st.sat * (1 + S.sat / 50 * 0.6), warm: (st.warm + S.warm / 50 * 0.25) * 60, nat: st.bw ? 0 : S.nature / 100 };
   }
   function applyAdjust(ctx, W, H, adj) {
-    const im = ctx.getImageData(0, 0, W, H), d = im.data, lut = adj.lut, s = adj.sat, ws = adj.warm;
+    const im = ctx.getImageData(0, 0, W, H), d = im.data, lut = adj.lut, s = adj.sat, ws = adj.warm, nat = adj.nat || 0;
     for (let i = 0; i < d.length; i += 4) {
       const r = lut[d[i]], g = lut[d[i + 1]], b = lut[d[i + 2]];
-      const y = 0.299 * r + 0.587 * g + 0.114 * b;
-      d[i] = y + (r - y) * s + ws;
-      d[i + 1] = y + (g - y) * s + ws * 0.15;
-      d[i + 2] = y + (b - y) * s - ws;
+      let y = 0.299 * r + 0.587 * g + 0.114 * b, sk = s;
+      if (nat > 0) {
+        // только синее небо и зелёная листва; кожа (красный > зелёный > синий) не затрагивается
+        const bl = b - Math.max(r, g), gr = g - Math.max(r, b);
+        const w = bl > 8 ? Math.min(1, (bl - 8) / 50) : gr > 6 ? Math.min(1, (gr - 6) / 45) : 0;
+        if (w > 0) { sk = s * (1 + nat * 0.55 * w); if (bl > 8) y -= nat * 0.07 * y * w; }
+      }
+      d[i] = y + (r - y) * sk + ws;
+      d[i + 1] = y + (g - y) * sk + ws * 0.15;
+      d[i + 2] = y + (b - y) * sk - ws;
     }
     ctx.putImageData(im, 0, 0);
   }
@@ -838,7 +869,10 @@ body.crop-open { overflow: hidden; }
         el('h3', { text: String(i + 1).padStart(2, '0') + '  ' + p.name }),
         el('span', { class: 'mono', text: p.w + '×' + p.h + ' px' }),
         orig,
-        p.sample ? null : el('button', { class: 'btn small', type: 'button', text: 'Обрезать', onclick: () => openCrop(p) }),
+        p.sample ? null : el('div', { class: 'toolrow' },
+          el('button', { class: 'btn small', type: 'button', text: 'Обрезать', onclick: () => openCrop(p) }),
+          el('button', { class: 'btn small', type: 'button', text: 'Ретушь', onclick: () => openRetouch(p) })),
+        p.preRetouch ? el('button', { class: 'linkbtn', type: 'button', text: 'Отменить ретушь', onclick: () => undoRetouch(p) }) : null,
         p.cropped ? el('button', { class: 'linkbtn', type: 'button', text: 'Вернуть оригинал', onclick: () => restoreOriginal(p) }) : null,
         el('button', { class: 'linkbtn', type: 'button', text: 'Вернуть автоцентр', onclick: () => { p.focus = { x: p.autoFocus.x, y: p.autoFocus.y }; p.manual = false; placeXhair(p); schedule(p); } }),
         el('button', { class: 'linkbtn', type: 'button', text: 'Убрать фото', onclick: () => removePhoto(p) })
@@ -899,7 +933,7 @@ body.crop-open { overflow: hidden; }
       try {
         const bmp = await decode(files[i]);
         if (added === 0) photos = photos.filter(p => { if (p.sample) return false; return true; });
-        const p = { id: nextId++, name: files[i].name || 'foto', src: bmp, orig: bmp, cropped: false, w: bmp.width, h: bmp.height, sample: false };
+        const p = { id: nextId++, name: files[i].name || 'foto', src: bmp, orig: bmp, cropped: false, retouched: false, preRetouch: null, w: bmp.width, h: bmp.height, sample: false };
         p.small = makeSmall(bmp);
         analyze(p);
         photos.push(p);
@@ -1224,11 +1258,12 @@ body.crop-open { overflow: hidden; }
     const c = document.createElement('canvas'); c.width = sw; c.height = sh;
     const g = c.getContext('2d'); g.imageSmoothingQuality = 'high';
     g.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
-    p.src = c; p.w = sw; p.h = sh; p.small = makeSmall(c); analyze(p); p.cropped = true;
+    p.src = c; p.w = sw; p.h = sh; p.small = makeSmall(c); analyze(p); p.cropped = true; p.preRetouch = null;
   }
+  function cropBase(p) { return p.retouched ? p.src : (p.orig || p.src); }
   function restoreOriginal(p) {
     if (!p.orig) return;
-    p.src = p.orig; p.w = p.orig.width; p.h = p.orig.height; p.small = makeSmall(p.orig); analyze(p); p.cropped = false;
+    p.src = p.orig; p.w = p.orig.width; p.h = p.orig.height; p.small = makeSmall(p.orig); analyze(p); p.cropped = false; p.retouched = false; p.preRetouch = null;
     buildList();
   }
   function rotated(src, rot) {
@@ -1267,7 +1302,7 @@ body.crop-open { overflow: hidden; }
     drawBox();
   }
   function openCrop(p) {
-    CR.p = p; CR.rot = 0; CR.work = p.orig || p.src; CR.ratio = 0; CR.W = 0;
+    CR.p = p; CR.rot = 0; CR.work = cropBase(p); CR.ratio = 0; CR.W = 0;
     const box = $('cropRatios'); box.textContent = '';
     for (const [name, r] of RATIOS) box.append(el('button', { class: 'chip', type: 'button', text: name, 'data-r': String(r), 'aria-pressed': String(r === 0), onclick: () => fitRatio(r) }));
     $('cropper').hidden = false; document.body.classList.add('crop-open');
@@ -1326,13 +1361,138 @@ body.crop-open { overflow: hidden; }
     $('cropReset').addEventListener('click', () => { if (CR.work) { CR.ratio = 0; fitRatio(0); layoutCrop(false); } });
     $('cropRotate').addEventListener('click', () => {
       if (!CR.p) return;
-      CR.rot = (CR.rot + 90) % 360; CR.work = rotated(CR.p.orig || CR.p.src, CR.rot); layoutCrop(false); fitRatio(CR.ratio);
+      CR.rot = (CR.rot + 90) % 360; CR.work = rotated(cropBase(CR.p), CR.rot); layoutCrop(false); fitRatio(CR.ratio);
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('cropper').hidden) closeCrop(); });
     window.addEventListener('resize', () => { if (!$('cropper').hidden && CR.work) layoutCrop(true); });
     $('quickBtn').addEventListener('click', quickMontage);
     buildQModes();
+    initRetouch();
   }
+  /* ---------- ретушь: размытие и удаление пятен ---------- */
+  function opBlur(ctx, W, H, cx, cy, r) {
+    const m = Math.ceil(r * 1.7), x0 = Math.max(0, Math.floor(cx - m)), y0 = Math.max(0, Math.floor(cy - m));
+    const x1 = Math.min(W, Math.ceil(cx + m)), y1 = Math.min(H, Math.ceil(cy + m)), w = x1 - x0, h = y1 - y0;
+    if (w < 2 || h < 2) return;
+    const t = getScratch(4, w, h), tg = t.getContext('2d');
+    tg.filter = 'blur(' + Math.max(2, r * 0.55).toFixed(1) + 'px)';
+    tg.drawImage(ctx.canvas, x0, y0, w, h, 0, 0, w, h);
+    tg.filter = 'none';
+    tg.globalCompositeOperation = 'destination-in';
+    const gr = tg.createRadialGradient(cx - x0, cy - y0, r * 0.6, cx - x0, cy - y0, r);
+    gr.addColorStop(0, '#000'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    tg.fillStyle = gr; tg.fillRect(0, 0, w, h);
+    ctx.drawImage(t, x0, y0);
+  }
+  function opHeal(ctx, W, H, cx, cy, r) {
+    const R = r * 1.5, N = 28, ring = [];
+    for (let i = 0; i < N; i++) {
+      const a = i / N * Math.PI * 2, px = clamp(Math.round(cx + Math.cos(a) * R), 1, W - 2), py = clamp(Math.round(cy + Math.sin(a) * R), 1, H - 2);
+      const q = ctx.getImageData(px - 1, py - 1, 3, 3).data; let rr = 0, gg = 0, bb = 0;
+      for (let k = 0; k < 36; k += 4) { rr += q[k]; gg += q[k + 1]; bb += q[k + 2]; }
+      ring.push({ x: px, y: py, r: rr / 9, g: gg / 9, b: bb / 9 });
+    }
+    const x0 = Math.max(0, Math.floor(cx - r * 1.2)), y0 = Math.max(0, Math.floor(cy - r * 1.2));
+    const x1 = Math.min(W, Math.ceil(cx + r * 1.2)), y1 = Math.min(H, Math.ceil(cy + r * 1.2)), w = x1 - x0, h = y1 - y0;
+    if (w < 2 || h < 2) return;
+    const im = ctx.getImageData(x0, y0, w, h), d = im.data;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const dx = x0 + x - cx, dy = y0 + y - cy, dist = Math.hypot(dx, dy);
+      if (dist > r * 1.1) continue;
+      const al = dist < r * 0.7 ? 1 : 1 - (dist - r * 0.7) / (r * 0.4);
+      let sw = 0, sr = 0, sg = 0, sb = 0;
+      for (const p of ring) { const e = (x0 + x - p.x) ** 2 + (y0 + y - p.y) ** 2 + 1, wt = 1 / (e * e); sw += wt; sr += wt * p.r; sg += wt * p.g; sb += wt * p.b; }
+      const i = (y * w + x) * 4;
+      d[i] += (sr / sw - d[i]) * al; d[i + 1] += (sg / sw - d[i + 1]) * al; d[i + 2] += (sb / sw - d[i + 2]) * al;
+    }
+    ctx.putImageData(im, x0, y0);
+  }
+  const RT = { p: null, base: null, W: 0, H: 0, ops: [], tool: 'b', size: 1, down: false, last: null, group: 0 };
+  const RT_SIZES = [['Малая', 0.022], ['Средняя', 0.045], ['Большая', 0.085]];
+  function rtApplyOp(ctx, W, H, op) { (op.t === 'b' ? opBlur : opHeal)(ctx, W, H, op.x * W, op.y * H, op.r * W); }
+  function rtRedraw() {
+    const cv = $('rtCanvas'), g = cv.getContext('2d', { willReadFrequently: true });
+    g.clearRect(0, 0, RT.W, RT.H); g.drawImage(RT.base, 0, 0);
+    for (const op of RT.ops) rtApplyOp(g, RT.W, RT.H, op);
+  }
+  function rtSetHint() {
+    $('rtHint').textContent = RT.tool === 'b' ? 'Проведи пальцем по лицу, номеру или тексту, чтобы закрыть размытием.' : 'Нажми на пятно, пылинку или мелкий предмет. Большие объекты не получатся.';
+    document.querySelectorAll('#rtTools .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.t === RT.tool)));
+    document.querySelectorAll('#rtSizes .chip').forEach(c => c.setAttribute('aria-pressed', String(Number(c.dataset.i) === RT.size)));
+  }
+  function openRetouch(p) {
+    RT.p = p; RT.ops = []; RT.tool = 'b'; RT.size = 1; RT.group = 0;
+    const tb = $('rtTools'); tb.textContent = '';
+    for (const [id, name] of [['b', 'Размыть'], ['h', 'Убрать пятно']]) tb.append(el('button', { class: 'chip', type: 'button', text: name, 'data-t': id, onclick: () => { RT.tool = id; rtSetHint(); } }));
+    const sb = $('rtSizes'); sb.textContent = '';
+    RT_SIZES.forEach(([name], i) => sb.append(el('button', { class: 'chip', type: 'button', text: name, 'data-i': String(i), onclick: () => { RT.size = i; rtSetHint(); } })));
+    rtSetHint();
+    $('retouch').hidden = false; document.body.classList.add('crop-open');
+    requestAnimationFrame(() => {
+      const src = p.src, stage = $('rtStage');
+      const aw = Math.max(60, stage.clientWidth - 24), ah = Math.max(60, stage.clientHeight - 24);
+      const k = Math.min(aw / src.width, ah / src.height, 1.5);
+      RT.W = Math.max(1, Math.round(src.width * k)); RT.H = Math.max(1, Math.round(src.height * k));
+      const base = document.createElement('canvas'); base.width = RT.W; base.height = RT.H;
+      const bg = base.getContext('2d'); bg.imageSmoothingQuality = 'high'; bg.drawImage(src, 0, 0, RT.W, RT.H);
+      RT.base = base;
+      const cv = $('rtCanvas'); cv.width = RT.W; cv.height = RT.H;
+      $('rtWrap').style.width = RT.W + 'px'; $('rtWrap').style.height = RT.H + 'px';
+      rtRedraw();
+    });
+  }
+  function closeRetouch() { $('retouch').hidden = true; document.body.classList.remove('crop-open'); RT.p = null; RT.base = null; RT.down = false; }
+  function undoRetouch(p) {
+    if (!p.preRetouch) return;
+    const f = p.focus, m = p.manual;
+    p.src = p.preRetouch; p.w = p.src.width; p.h = p.src.height; p.small = makeSmall(p.src); analyze(p);
+    p.focus = f; p.manual = m; p.retouched = false; p.preRetouch = null;
+    buildList(); setStatus('Ретушь отменена.');
+  }
+  function applyRetouch() {
+    const p = RT.p, ops = RT.ops.slice();
+    closeRetouch();
+    if (!p || !ops.length) return;
+    const src = p.src, c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0);
+    for (const op of ops) rtApplyOp(g, c.width, c.height, op);
+    const f = p.focus, m = p.manual;
+    if (!p.preRetouch) p.preRetouch = src;
+    p.src = c; p.small = makeSmall(c); analyze(p); p.focus = f; p.manual = m; p.retouched = true;
+    buildList(); setStatus('Ретушь применена. Её можно отменить под фото.');
+  }
+  function rtPoint(e) {
+    const r = $('rtCanvas').getBoundingClientRect();
+    return { x: clamp((e.clientX - r.left) / r.width, 0, 1), y: clamp((e.clientY - r.top) / r.height, 0, 1), px: e.clientX - r.left, py: e.clientY - r.top };
+  }
+  function rtPaint(e, first) {
+    const q = rtPoint(e), rad = RT_SIZES[RT.size][1], ring = $('rtRing'), d = rad * RT.W * 2;
+    ring.style.display = 'block'; ring.style.width = d + 'px'; ring.style.height = d + 'px'; ring.style.left = q.px + 'px'; ring.style.top = q.py + 'px';
+    const step = rad * (RT.tool === 'b' ? 0.5 : 1.4);
+    if (!first && RT.last && Math.hypot((q.x - RT.last.x) * RT.W, (q.y - RT.last.y) * RT.W) < step * RT.W) return;
+    RT.last = q;
+    const op = { t: RT.tool, x: q.x, y: q.y, r: rad, g: RT.group };
+    RT.ops.push(op);
+    rtApplyOp($('rtCanvas').getContext('2d', { willReadFrequently: true }), RT.W, RT.H, op);
+  }
+  function initRetouch() {
+    const cv = $('rtCanvas');
+    cv.addEventListener('pointerdown', e => { if (!RT.base) return; RT.down = true; RT.last = null; RT.group++; try { cv.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } rtPaint(e, true); e.preventDefault(); });
+    cv.addEventListener('pointermove', e => { if (RT.down) rtPaint(e, false); });
+    const up = () => { RT.down = false; $('rtRing').style.display = 'none'; };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    $('rtCancel').addEventListener('click', closeRetouch);
+    $('rtApply').addEventListener('click', applyRetouch);
+    $('rtUndo').addEventListener('click', () => {
+      if (!RT.ops.length) return;
+      const g = RT.ops[RT.ops.length - 1].g;
+      while (RT.ops.length && RT.ops[RT.ops.length - 1].g === g) RT.ops.pop();
+      rtRedraw();
+    });
+    $('rtClear').addEventListener('click', () => { RT.ops = []; if (RT.base) rtRedraw(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('retouch').hidden) closeRetouch(); });
+  }
+
   // ищет сплошные чёрные или белые полосы по краям кадра (скриншоты, поля)
   function findTrim(p) {
     const c = p.small, W = c.width, H = c.height;
@@ -1394,9 +1554,9 @@ body.crop-open { overflow: hidden; }
     p.src = c; p.w = nw; p.h = nh; p.small = makeSmall(c); analyze(p); p.cropped = true;
   }
   const QMODES = [
-    { id: 'soft', name: 'Мягко', vals: { auto: 40, sharp: 20, shadow: 15, denoise: 25, con: 0, sat: 0 } },
+    { id: 'soft', name: 'Мягко', vals: { auto: 40, sharp: 20, shadow: 15, denoise: 25, nature: 0, con: 0, sat: 0 } },
     { id: 'norm', name: 'Как обычно', vals: {} },
-    { id: 'bright', name: 'Ярко', vals: { auto: 90, sharp: 50, shadow: 35, denoise: 30, con: 10, sat: 14 } }
+    { id: 'bright', name: 'Ярко', vals: { auto: 90, sharp: 50, shadow: 35, denoise: 30, nature: 30, con: 10, sat: 14 } }
   ];
   let qmode = 'norm';
   try { const q = localStorage.getItem('fotocex-qmode'); if (QMODES.some(m => m.id === q)) qmode = q; } catch (e) { /* ignore */ }
@@ -1439,14 +1599,14 @@ body.crop-open { overflow: hidden; }
 
   /* ---------- наборы и складывание секций на телефоне ---------- */
   const MINE_KEY = 'fotocex-mine-v1';
-  const PRESET_KEYS = ['formats', 'mode', 'auto', 'style', 'bright', 'con', 'sat', 'warm', 'sharp', 'shadow', 'denoise', 'wmOn', 'wmPos', 'wmSize',
+  const PRESET_KEYS = ['formats', 'mode', 'auto', 'style', 'bright', 'con', 'sat', 'warm', 'sharp', 'shadow', 'denoise', 'nature', 'wmOn', 'wmPos', 'wmSize',
     'logoOn', 'logoPos', 'logoSize', 'logoOpacity', 'logoPlate', 'mkOn', 'mkPos', 'mkOpacity'];
   const SETS = [
-    { id: 'kkt', name: 'ККТ · ВК', vals: { formats: ['post45', 'story'], mode: 'fill', auto: 70, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0, sharp: 35, shadow: 25, denoise: 25,
+    { id: 'kkt', name: 'ККТ · ВК', vals: { formats: ['post45', 'story'], mode: 'fill', auto: 70, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0, sharp: 35, shadow: 25, denoise: 25, nature: 15,
       logoOn: true, logoPos: 'tr', logoSize: 18, logoOpacity: 100, logoPlate: false, mkOn: true, mkPos: 'bl', mkOpacity: 18 } }
   ];
   function syncAll() {
-    for (const k of ['auto', 'sharp', 'shadow', 'denoise', 'bright', 'con', 'sat', 'warm', 'wmSize', 'quality', 'logoSize', 'logoOpacity', 'mkOpacity', 'wmPos', 'logoPos', 'mkPos']) $(k).value = S[k];
+    for (const k of ['auto', 'sharp', 'shadow', 'denoise', 'nature', 'bright', 'con', 'sat', 'warm', 'wmSize', 'quality', 'logoSize', 'logoOpacity', 'mkOpacity', 'wmPos', 'logoPos', 'mkPos']) $(k).value = S[k];
     for (const k of ['wmOn', 'logoOn', 'logoPlate', 'mkOn']) $(k).checked = S[k];
     $('wmText').value = S.wmText;
     buildFormats(); syncUI();
@@ -1544,7 +1704,7 @@ body.crop-open { overflow: hidden; }
     $('o-sat').textContent = signed(S.sat); $('o-warm').textContent = signed(S.warm);
     $('o-wmSize').textContent = S.wmSize + '%'; $('o-quality').textContent = S.quality;
     $('o-logoSize').textContent = S.logoSize + '%'; $('o-logoOpacity').textContent = S.logoOpacity + '%'; $('o-mkOpacity').textContent = S.mkOpacity + '%';
-    $('o-sharp').textContent = S.sharp + '%'; $('o-shadow').textContent = S.shadow + '%'; $('o-denoise').textContent = S.denoise + '%';
+    $('o-sharp').textContent = S.sharp + '%'; $('o-shadow').textContent = S.shadow + '%'; $('o-denoise').textContent = S.denoise + '%'; $('o-nature').textContent = S.nature + '%';
   }
   function bindRange(id, key) {
     const n = $(id); n.value = S[key];
@@ -1553,11 +1713,11 @@ body.crop-open { overflow: hidden; }
   function initPanel() {
     buildFormats(); buildStyles();
     document.querySelectorAll('#mode input').forEach(i => i.addEventListener('change', () => { S.mode = i.value; syncUI(); saveSettings(); schedule(null); }));
-    bindRange('auto', 'auto'); bindRange('sharp', 'sharp'); bindRange('shadow', 'shadow'); bindRange('denoise', 'denoise'); bindRange('bright', 'bright'); bindRange('con', 'con'); bindRange('sat', 'sat'); bindRange('warm', 'warm');
+    bindRange('auto', 'auto'); bindRange('sharp', 'sharp'); bindRange('shadow', 'shadow'); bindRange('denoise', 'denoise'); bindRange('nature', 'nature'); bindRange('bright', 'bright'); bindRange('con', 'con'); bindRange('sat', 'sat'); bindRange('warm', 'warm');
     bindRange('wmSize', 'wmSize'); bindRange('quality', 'quality');
     $('resetColor').addEventListener('click', () => {
-      Object.assign(S, { auto: DEFAULTS.auto, sharp: DEFAULTS.sharp, shadow: DEFAULTS.shadow, denoise: DEFAULTS.denoise, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0 });
-      for (const k of ['auto', 'sharp', 'shadow', 'denoise', 'bright', 'con', 'sat', 'warm']) $(k).value = S[k];
+      Object.assign(S, { auto: DEFAULTS.auto, sharp: DEFAULTS.sharp, shadow: DEFAULTS.shadow, denoise: DEFAULTS.denoise, nature: DEFAULTS.nature, style: 'orig', bright: 0, con: 0, sat: 0, warm: 0 });
+      for (const k of ['auto', 'sharp', 'shadow', 'denoise', 'nature', 'bright', 'con', 'sat', 'warm']) $(k).value = S[k];
       syncUI(); saveSettings(); schedule(null);
     });
     $('wmOn').checked = S.wmOn; $('wmText').value = S.wmText; $('wmPos').value = S.wmPos;
