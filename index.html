@@ -169,10 +169,10 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 }
 button, label, select { touch-action: manipulation; }
 .dock { display: flex; flex-direction: column; gap: 16px; }
-.btn.share { width: 100%; }
+.btn.share, .btn.galbtn { width: 100%; }
 @media (max-width: 860px) {
   :root { --th: 230px; }
-  body { padding-bottom: 210px; }
+  body { padding-bottom: 260px; }
   .panel { padding: 0 16px; }
   .sec { padding-top: 0; }
   .sec + .sec { margin-top: 0; }
@@ -273,7 +273,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 8.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 9.</p>
   </header>
 
   <div class="app">
@@ -398,8 +398,9 @@ body.crop-open { overflow: hidden; }
         <div class="bar">
           <p id="summary" class="mono"></p>
           <button class="btn" id="settingsBtn" type="button">Настройки</button>
-          <button class="btn primary" id="exportBtn" type="button">Скачать всё (ZIP)</button>
+          <button class="btn" id="exportBtn" type="button">ZIP-архив</button>
         </div>
+        <button class="btn primary galbtn" id="galBtn" type="button">Сохранить все в галерею</button>
         <button class="btn share" id="shareBtn" type="button" hidden>Поделиться (ВК, Telegram…)</button>
         <div class="progress" id="progress" hidden><i id="progressFill"></i></div>
         <p class="status" id="status" role="status" aria-live="polite"></p>
@@ -830,6 +831,7 @@ body.crop-open { overflow: hidden; }
     else if (!real) summaryEl.textContent = 'Пока виден пример';
     else summaryEl.textContent = real + ' ' + plural(real, ['фото', 'фото', 'фото']) + ' × ' + nf + ' ' + plural(nf, ['формат', 'формата', 'форматов']) + ' = ' + frames + ' ' + plural(frames, ['кадр', 'кадра', 'кадров']);
     exportBtn.disabled = busy || !real || !nf;
+    $('galBtn').disabled = busy || !real || !nf;
     $('shareBtn').disabled = busy || !real || !nf;
     $('quickBtn').disabled = busy || !real;
     document.querySelectorAll('.save').forEach(b => { b.disabled = busy; });
@@ -868,7 +870,7 @@ body.crop-open { overflow: hidden; }
     }
     buildList();
     if (failed.length) setStatus('Не получилось открыть: ' + failed.join(', '), true);
-    else setStatus(added ? 'Добавлено: ' + added + '. Проверь кадры и жми «Скачать всё».' : '');
+    else setStatus(added ? 'Добавлено: ' + added + '. Проверь кадры и жми «Сохранить все в галерею».' : '');
   }
 
   /* ---------- сохранение ---------- */
@@ -975,6 +977,33 @@ body.crop-open { overflow: hidden; }
       setStatus('Архив сохранён: ' + total + ' ' + plural(total, ['кадр', 'кадра', 'кадров']) + '.');
     } catch (e) { setStatus(errText(e), !(e && e.code === 'declined')); }
     bar.hidden = true; busy = false; refresh();
+  }
+
+  async function saveAllGallery() {
+    if (busy) return;
+    const real = photos.filter(p => !p.sample);
+    const presets = PRESETS.filter(p => S.formats.includes(p.id));
+    if (!real.length || !presets.length) return;
+    busy = true; refresh();
+    const total = real.length * presets.length;
+    try {
+      let done = 0;
+      const c = document.createElement('canvas');
+      for (const p of real) {
+        const adj = buildAdjust(p);
+        for (const pr of presets) {
+          setStatus('Сохраняю: ' + (done + 1) + ' из ' + total);
+          renderFormat(c, p, pr, true, adj);
+          const blob = await toBlob(c);
+          await saveFile(baseName(p) + '_' + pr.id + '.jpg', blob);
+          done++;
+          await new Promise(r => setTimeout(r, 350));
+        }
+      }
+      c.width = c.height = 0;
+      setStatus(dl ? 'Сохранено: ' + total + '.' : 'Сохранено в «Загрузки»: ' + total + '. В галерее ищи альбом Download. Если Chrome спросил про несколько файлов, разреши.');
+    } catch (e) { setStatus(errText(e), !(e && e.code === 'declined')); }
+    busy = false; refresh();
   }
 
   async function shareAll() {
@@ -1306,7 +1335,7 @@ body.crop-open { overflow: hidden; }
     busy = false;
     applySet(SETS[0].name, SETS[0].vals);
     const n = real.length;
-    setStatus('Быстрый монтаж готов: ' + n + ' ' + plural(n, ['фото', 'фото', 'фото']) + (trimmed ? ', убраны полосы у ' + trimmed : '') + '. Проверь кадры и нажми «Скачать всё».');
+    setStatus('Быстрый монтаж готов: ' + n + ' ' + plural(n, ['фото', 'фото', 'фото']) + (trimmed ? ', убраны полосы у ' + trimmed : '') + '. Проверь кадры и нажми «Сохранить все в галерею».');
   }
 
   /* ---------- наборы и складывание секций на телефоне ---------- */
@@ -1457,6 +1486,7 @@ body.crop-open { overflow: hidden; }
     if (f && f.length) addFiles(f);
   });
   exportBtn.addEventListener('click', exportAll);
+  $('galBtn').addEventListener('click', saveAllGallery);
   if (navigator.share && navigator.canShare) { $('shareBtn').hidden = false; $('shareBtn').addEventListener('click', shareAll); }
 
   initPanel();
