@@ -169,9 +169,10 @@ main { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 }
 button, label, select { touch-action: manipulation; }
 .dock { display: flex; flex-direction: column; gap: 16px; }
+.btn.share { width: 100%; }
 @media (max-width: 860px) {
   :root { --th: 230px; }
-  body { padding-bottom: 150px; }
+  body { padding-bottom: 210px; }
   .panel { padding: 0 16px; }
   .sec { padding-top: 0; }
   .sec + .sec { margin-top: 0; }
@@ -399,6 +400,7 @@ body.crop-open { overflow: hidden; }
           <button class="btn" id="settingsBtn" type="button">Настройки</button>
           <button class="btn primary" id="exportBtn" type="button">Скачать всё (ZIP)</button>
         </div>
+        <button class="btn share" id="shareBtn" type="button" hidden>Поделиться (ВК, Telegram…)</button>
         <div class="progress" id="progress" hidden><i id="progressFill"></i></div>
         <p class="status" id="status" role="status" aria-live="polite"></p>
       </div>
@@ -740,7 +742,9 @@ body.crop-open { overflow: hidden; }
     return p.name.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().slice(0, 60) || 'foto';
   }
 
+  let shareCache = null;
   function buildList() {
+    shareCache = null; $('shareBtn').textContent = 'Поделиться (ВК, Telegram…)';
     list.textContent = '';
     if (!photos.length) {
       list.append(el('p', { class: 'empty', text: 'Пока ни одного фото. Перетащи файлы в рамку выше.' }));
@@ -803,6 +807,7 @@ body.crop-open { overflow: hidden; }
     else if (!real) summaryEl.textContent = 'Пока виден пример';
     else summaryEl.textContent = real + ' ' + plural(real, ['фото', 'фото', 'фото']) + ' × ' + nf + ' ' + plural(nf, ['формат', 'формата', 'форматов']) + ' = ' + frames + ' ' + plural(frames, ['кадр', 'кадра', 'кадров']);
     exportBtn.disabled = busy || !real || !nf;
+    $('shareBtn').disabled = busy || !real || !nf;
     $('quickBtn').disabled = busy || !real;
     document.querySelectorAll('.save').forEach(b => { b.disabled = busy; });
   }
@@ -947,6 +952,47 @@ body.crop-open { overflow: hidden; }
       setStatus('Архив сохранён: ' + total + ' ' + plural(total, ['кадр', 'кадра', 'кадров']) + '.');
     } catch (e) { setStatus(errText(e), !(e && e.code === 'declined')); }
     bar.hidden = true; busy = false; refresh();
+  }
+
+  async function shareAll() {
+    if (busy) return;
+    const real = photos.filter(p => !p.sample);
+    const presets = PRESETS.filter(p => S.formats.includes(p.id));
+    if (!real.length || !presets.length) return;
+    const btn = $('shareBtn');
+    busy = true; refresh();
+    try {
+      if (!shareCache) {
+        const files = [], used = new Set(), c = document.createElement('canvas');
+        let done = 0; const total = real.length * presets.length;
+        for (const p of real) {
+          const adj = buildAdjust(p);
+          for (const pr of presets) {
+            setStatus('Готовлю кадры: ' + done + ' из ' + total);
+            renderFormat(c, p, pr, true, adj);
+            const blob = await toBlob(c);
+            let name = baseName(p) + '_' + pr.id + '.jpg', n = 2;
+            while (used.has(name)) name = baseName(p) + '-' + (n++) + '_' + pr.id + '.jpg';
+            used.add(name);
+            files.push(new File([blob], name, { type: 'image/jpeg' }));
+            done++;
+            await new Promise(r => setTimeout(r, 0));
+          }
+        }
+        c.width = c.height = 0;
+        shareCache = files;
+      }
+      if (navigator.canShare && !navigator.canShare({ files: shareCache })) throw new Error('Телефон не даёт поделиться столькими файлами сразу. Убери часть фото или форматов, либо скачай ZIP.');
+      try {
+        await navigator.share({ files: shareCache });
+        setStatus('Отправлено.');
+      } catch (e) {
+        if (e && e.name === 'AbortError') setStatus('Отправка отменена.');
+        else if (e && e.name === 'NotAllowedError') { btn.textContent = 'Кадры готовы, нажми ещё раз'; setStatus('Кадры готовы. Нажми кнопку ещё раз, чтобы выбрать, куда отправить.'); }
+        else throw e;
+      }
+    } catch (e) { setStatus((e && e.message) || 'Не получилось поделиться. Скачай ZIP.', true); }
+    busy = false; refresh();
   }
 
   /* ---------- пример: вулкан на закате, нарисован кодом ---------- */
@@ -1386,6 +1432,7 @@ body.crop-open { overflow: hidden; }
     if (f && f.length) addFiles(f);
   });
   exportBtn.addEventListener('click', exportAll);
+  if (navigator.share && navigator.canShare) { $('shareBtn').hidden = false; $('shareBtn').addEventListener('click', shareAll); }
 
   initPanel();
   initBrand();
