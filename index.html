@@ -285,7 +285,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 12.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 13.</p>
   </header>
 
   <div class="app">
@@ -571,12 +571,20 @@ body.crop-open { overflow: hidden; }
     g.drawImage(p.small, 0, 0, w, h);
     const d = g.getImageData(0, 0, w, h).data;
     const L = new Float32Array(w * h), Sa = new Float32Array(w * h), hist = new Uint32Array(256);
+    let wr = 0, wg = 0, wb = 0, wn = 0;
     for (let i = 0, j = 0; i < d.length; i += 4, j++) {
       const r = d[i], gg = d[i + 1], b = d[i + 2];
       const l = 0.299 * r + 0.587 * gg + 0.114 * b;
       L[j] = l; hist[l | 0]++;
       const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
       Sa[j] = mx ? (mx - mn) / mx : 0;
+      // баланс белого: только почти нейтральные средние тона, без кожи и ярких цветов
+      if (l > 50 && l < 215 && Sa[j] < 0.18) { wr += r; wg += gg; wb += b; wn++; }
+    }
+    let gains = { r: 1, g: 1, b: 1 };
+    if (wn > w * h * 0.08) {
+      const av = (wr + wg + wb) / 3;
+      gains = { r: clamp(av / wr, 0.94, 1.06), g: clamp(av / wg, 0.94, 1.06), b: clamp(av / wb, 0.94, 1.06) };
     }
     const tot = w * h;
     let acc = 0, lo = 0, hi = 255;
@@ -599,7 +607,8 @@ body.crop-open { overflow: hidden; }
     let ms = 0; for (let j = 0; j < tot; j++) ms += L[j];
     ms /= tot * 255;
     const dk = clamp((0.42 - ms) / 0.25, -1, 1);
-    p.smart = { shadowK: 1 + 0.8 * dk, noiseK: 1 + Math.max(0, dk) * 1.2 };
+    const clipF = (hist[250] + hist[251] + hist[252] + hist[253] + hist[254] + hist[255]) / tot;
+    p.smart = { shadowK: 1 + 0.8 * dk, noiseK: 1 + Math.max(0, dk) * 1.2, hiPull: clamp((clipF - 0.01) * 8, 0, 0.6), wb: gains };
     p.auto = { lo, hi, gamma };
     p.autoFocus = { x: clamp(0.7 * cx + 0.15, 0.12, 0.88), y: clamp(0.7 * cy + 0.3 * 0.42, 0.12, 0.88) };
     p.focus = { x: p.autoFocus.x, y: p.autoFocus.y };
@@ -635,22 +644,32 @@ body.crop-open { overflow: hidden; }
     const a = S.auto / 100;
     const lo = p.auto.lo * a, hi = 1 - (1 - p.auto.hi) * a, gam = 1 + (p.auto.gamma - 1) * a;
     const k = 1 + st.con + S.con / 50 * 0.5, b = S.bright / 50 * 0.18, sh = clamp(S.shadow / 100 * (p.useSmart && p.smart ? p.smart.shadowK : 1), 0, 1);
+    const hp = p.smart ? p.smart.hiPull * a : 0;
     const lut = new Uint8ClampedArray(256);
     for (let i = 0; i < 256; i++) {
       let v = clamp((i / 255 - lo) / (hi - lo), 0, 1);
       v = Math.pow(v, gam) + b;
+      if (hp > 0) { const t = clamp((v - 0.72) / 0.28, 0, 1); v -= hp * 0.2 * t * t; }
       v = v + sh * 0.9 * v * (1 - v) * (1 - v) - sh * 0.55 * v * v * (1 - v);
       v = (v - 0.5) * k + 0.5;
       if (st.fade) v = st.fade * 0.9 + v * (1 - st.fade * 0.9);
       lut[i] = Math.round(clamp(v, 0, 1) * 255);
     }
-    return { lut, sat: st.bw ? 0 : st.sat * (1 + S.sat / 50 * 0.6), warm: (st.warm + S.warm / 50 * 0.25) * 60, nat: st.bw ? 0 : S.nature / 100 };
+    return { lut, sat: st.bw ? 0 : st.sat * (1 + S.sat / 50 * 0.6), warm: (st.warm + S.warm / 50 * 0.25) * 60, nat: st.bw ? 0 : S.nature / 100,
+      wb: p.smart && !st.bw ? { r: 1 + (p.smart.wb.r - 1) * a, g: 1 + (p.smart.wb.g - 1) * a, b: 1 + (p.smart.wb.b - 1) * a } : null };
   }
   function applyAdjust(ctx, W, H, adj) {
-    const im = ctx.getImageData(0, 0, W, H), d = im.data, lut = adj.lut, s = adj.sat, ws = adj.warm, nat = adj.nat || 0;
+    const im = ctx.getImageData(0, 0, W, H), d = im.data, lut = adj.lut, s = adj.sat, ws = adj.warm, nat = adj.nat || 0, wbg = adj.wb;
+    const gr0 = wbg ? wbg.r : 1, gg0 = wbg ? wbg.g : 1, gb0 = wbg ? wbg.b : 1;
     for (let i = 0; i < d.length; i += 4) {
-      const r = lut[d[i]], g = lut[d[i + 1]], b = lut[d[i + 2]];
+      const r = lut[Math.min(255, d[i] * gr0 + 0.5 | 0)], g = lut[Math.min(255, d[i + 1] * gg0 + 0.5 | 0)], b = lut[Math.min(255, d[i + 2] * gb0 + 0.5 | 0)];
       let y = 0.299 * r + 0.587 * g + 0.114 * b, sk = s;
+      if (s > 1) {
+        // «живость»: слабые цвета усиливаем сильнее, насыщенные и кожу почти не трогаем
+        const mx0 = Math.max(r, g, b), sat0 = mx0 ? (mx0 - Math.min(r, g, b)) / mx0 : 0;
+        const skin = r > g && g > b && r - b > 20 && sat0 < 0.7 ? 0.45 : 1;
+        sk = 1 + (s - 1) * (1 - 0.6 * sat0) * skin;
+      }
       if (nat > 0) {
         // только синее небо и зелёная листва; кожа (красный > зелёный > синий) не затрагивается
         const bl = b - Math.max(r, g), gr = g - Math.max(r, b);
@@ -732,9 +751,15 @@ body.crop-open { overflow: hidden; }
     bg.filter = 'none';
     const a = ctx.getImageData(0, 0, W, H), b = bg.getImageData(0, 0, W, H), d = a.data, q = b.data;
     for (let i = 0; i < d.length; i += 4) {
-      const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
-      const w = Math.min(1, amt) * Math.pow(Math.max(0, 1 - l * 1.6), 1.4);
-      if (w > 0.004) { d[i] += (q[i] - d[i]) * w; d[i + 1] += (q[i + 1] - d[i + 1]) * w; d[i + 2] += (q[i + 2] - d[i + 2]) * w; }
+      const yo = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2], yb = 0.299 * q[i] + 0.587 * q[i + 1] + 0.114 * q[i + 2];
+      const l = yo / 255, a1 = Math.min(1, amt);
+      const w = a1 * Math.pow(Math.max(0, 1 - l * 1.6), 1.4);           // зерно яркости: только в тёмном
+      const wc = Math.min(1, a1 * (0.25 + 0.9 * Math.max(0, 1 - l * 1.3)));  // цветной шум: почти везде, сильнее в тёмном
+      if (wc > 0.004) {
+        const y = yo + (yb - yo) * w;
+        const cr = (d[i] - yo) + ((q[i] - yb) - (d[i] - yo)) * wc, cg = (d[i + 1] - yo) + ((q[i + 1] - yb) - (d[i + 1] - yo)) * wc, cb = (d[i + 2] - yo) + ((q[i + 2] - yb) - (d[i + 2] - yo)) * wc;
+        d[i] = y + cr; d[i + 1] = y + cg; d[i + 2] = y + cb;
+      }
     }
     ctx.putImageData(a, 0, 0);
   }
