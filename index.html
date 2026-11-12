@@ -272,6 +272,8 @@ body.crop-open { overflow: hidden; }
 .croprow { display: flex; gap: 10px; }
 .rtring { position: absolute; pointer-events: none; border: 2px solid var(--accent); border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.5); transform: translate(-50%, -50%); display: none; }
 .rthint { margin: 0; font-size: 13px; color: #B5BBC6; }
+.colcanvas { max-width: 100%; max-height: 100%; width: auto; height: auto; border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+.btn.collage { width: 100%; }
 .toolrow { display: flex; gap: 8px; }
 .toolrow .btn { flex: 1; }
 .croprow .btn { flex: 1; }
@@ -285,7 +287,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 13.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 14.</p>
   </header>
 
   <div class="app">
@@ -407,6 +409,7 @@ body.crop-open { overflow: hidden; }
 
       <div class="chips qmodes" id="qmodes" role="group" aria-label="Режим быстрого монтажа"></div>
       <button class="btn quick" id="quickBtn" type="button">Быстрый монтаж</button>
+      <button class="btn collage" id="collageBtn" type="button">Коллаж из фото</button>
       <p class="hint quickhint">Одна кнопка: убирает полосы по краям, выравнивает наклон, подбирает силу обработки под каждое фото, ставит стиль ККТ · ВК.</p>
 
       <div class="dock">
@@ -426,6 +429,19 @@ body.crop-open { overflow: hidden; }
 
       <div class="list" id="list"></div>
     </main>
+  </div>
+</div>
+
+<div class="cropper" id="collage" hidden role="dialog" aria-modal="true" aria-label="Коллаж">
+  <div class="cropbar">
+    <button class="btn small" id="colClose" type="button">Закрыть</button>
+    <strong>Коллаж</strong>
+    <button class="btn small primary" id="colSave" type="button">В галерею</button>
+  </div>
+  <div class="cropstage"><canvas id="colCanvas" class="colcanvas"></canvas></div>
+  <div class="croptools">
+    <p class="rthint" id="colInfo"></p>
+    <div class="croprow"><button class="btn small" id="colShuffle" type="button">Другой вариант</button><button class="btn small" id="colShare" type="button" hidden>Поделиться</button></div>
   </div>
 </div>
 
@@ -697,7 +713,7 @@ body.crop-open { overflow: hidden; }
   }
   function drawBase(ctx, p, src, W, H) {
     const ta = W / H, sw = src.width, sh = src.height;
-    if (S.mode === 'fill' || Math.abs(sw / sh / ta - 1) < 0.03) {
+    if (forceFill || S.mode === 'fill' || Math.abs(sw / sh / ta - 1) < 0.03) {
       const [x, y, cw, ch] = coverRect(sw, sh, ta, p.focus.x, p.focus.y);
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(src, x, y, cw, ch, 0, 0, W, H);
@@ -819,7 +835,7 @@ body.crop-open { overflow: hidden; }
     ctx.fillText('МЕДИА ККТ', x, top ? pad : H - pad);
     ctx.restore();
   }
-  function renderFormat(canvas, p, preset, full, adj) {
+  function renderFormat(canvas, p, preset, full, adj, bare) {
     let W, H;
     if (full) { W = preset.w; H = preset.h; }
     else { H = Math.min(PREVIEW_H, preset.h); W = Math.round(preset.w * H / preset.h); }
@@ -831,6 +847,7 @@ body.crop-open { overflow: hidden; }
     denoiseDark(ctx, W, H, S.denoise / 100 * (p.useSmart && p.smart ? p.smart.noiseK : 1) * (full ? 1 : 0.6));
     applyAdjust(ctx, W, H, adj);
     sharpen(ctx, W, H, S.sharp / 100);
+    if (bare) return;
     drawLogo(ctx, W, H);
     drawMedia(ctx, W, H);
     drawMark(ctx, W, H);
@@ -933,6 +950,7 @@ body.crop-open { overflow: hidden; }
     $('galBtn').textContent = frames ? 'В галерею (' + frames + ')' : 'В галерею';
     $('shareBtn').disabled = busy || !real || !nf;
     $('quickBtn').disabled = busy || !real;
+    $('collageBtn').disabled = busy || real < 2;
     document.querySelectorAll('.save').forEach(b => { b.disabled = busy; });
   }
 
@@ -1393,7 +1411,120 @@ body.crop-open { overflow: hidden; }
     $('quickBtn').addEventListener('click', quickMontage);
     buildQModes();
     initRetouch();
+    initCollage();
   }
+  /* ---------- коллаж ---------- */
+  let forceFill = false;
+  // раскладки: строки с весами высоты, в строке ячейки с весами ширины
+  function collageRows(n, W, H) {
+    const r = H / W, tall = r >= 1.2, wide = r < 0.8;
+    const L = {
+      2: tall ? [[1, [1]], [1, [1]]] : [[1, [1, 1]]],
+      3: tall ? [[1.25, [1]], [1, [1, 1]]] : wide ? [[1, [1.5, 1, 1]]] : [[1.2, [1]], [1, [1, 1]]],
+      4: [[1, [1, 1]], [1, [1, 1]]],
+      5: tall ? [[1.1, [1]], [1, [1, 1]], [1, [1, 1]]] : [[1, [1, 1]], [1, [1, 1, 1]]],
+      6: tall ? [[1, [1, 1]], [1, [1, 1]], [1, [1, 1]]] : [[1, [1, 1, 1]], [1, [1, 1, 1]]]
+    };
+    if (wide && n === 5) return [[1, [1, 1, 1]], [1, [1, 1]]];
+    return L[n];
+  }
+  function collageRects(n, W, H, flip) {
+    let rows = collageRows(n, W, H).map(r => [r[0], r[1].slice()]);
+    const base = Math.min(W, H), m = Math.round(base * 0.045), g = Math.round(base * 0.022);
+    const iw = W - 2 * m, ih = H - 2 * m, sh = rows.reduce((a, r) => a + r[0], 0);
+    const rects = []; let y = m;
+    for (const [rw, cols] of rows) {
+      const rh = (ih - g * (rows.length - 1)) * rw / sh, sw = cols.reduce((a, c) => a + c, 0);
+      let x = m;
+      for (const cw of cols) {
+        const w = (iw - g * (cols.length - 1)) * cw / sw;
+        rects.push({ x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(rh) });
+        x += w + g;
+      }
+      y += rh + g;
+    }
+    if (flip) for (const r of rects) r.x = W - r.x - r.w;
+    return rects;
+  }
+  function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+  function buildCollage(list, preset, v) {
+    const W = preset.w, H = preset.h, n = list.length, base = Math.min(W, H);
+    const rot = v % n, order = list.slice(rot).concat(list.slice(0, rot));
+    const rects = collageRects(n, W, H, Math.floor(v / n) % 2 === 1);
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const ctx = c.getContext('2d');
+    // фон: размытый и затемнённый кадр из подборки
+    const bgSrc = order[0].small, k = Math.max(W / bgSrc.width, H / bgSrc.height);
+    ctx.filter = 'blur(' + Math.round(base * 0.04) + 'px)';
+    ctx.drawImage(bgSrc, (W - bgSrc.width * k) / 2, (H - bgSrc.height * k) / 2, bgSrc.width * k, bgSrc.height * k);
+    ctx.filter = 'none';
+    ctx.fillStyle = 'rgba(8,10,14,0.58)'; ctx.fillRect(0, 0, W, H);
+    const rad = Math.round(base * 0.024), cell = document.createElement('canvas');
+    forceFill = true;
+    try {
+      order.forEach((p, i) => {
+        const r = rects[i];
+        renderFormat(cell, p, { w: r.w, h: r.h }, true, buildAdjust(p), true);
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = base * 0.03; ctx.shadowOffsetY = base * 0.008;
+        ctx.fillStyle = '#000'; rrect(ctx, r.x, r.y, r.w, r.h, rad); ctx.fill();
+        ctx.restore();
+        ctx.save(); rrect(ctx, r.x, r.y, r.w, r.h, rad); ctx.clip();
+        ctx.drawImage(cell, r.x, r.y); ctx.restore();
+      });
+    } finally { forceFill = false; cell.width = cell.height = 0; }
+    const ls = S.logoSize; S.logoSize = Math.round(ls * 0.7);
+    try { drawLogo(ctx, W, H); } finally { S.logoSize = ls; }
+    drawMedia(ctx, W, H); drawMark(ctx, W, H);
+    return c;
+  }
+  const COL = { v: 0, list: [], preset: null, canvas: null };
+  function collagePreset() { return PRESETS.find(p => p.id === S.formats[0]) || PRESETS[0]; }
+  function showCollage() {
+    if (!COL.list.length) return;
+    COL.canvas = buildCollage(COL.list, COL.preset, COL.v);
+    const view = $('colCanvas'); view.width = COL.canvas.width; view.height = COL.canvas.height;
+    view.getContext('2d').drawImage(COL.canvas, 0, 0);
+  }
+  async function openCollage() {
+    if (busy) return;
+    const real = photos.filter(p => !p.sample);
+    if (real.length < 2) { setStatus('Для коллажа нужно минимум 2 фото.', true); return; }
+    busy = true; refresh(); setStatus('Собираю коллаж…');
+    await new Promise(r => setTimeout(r, 30));
+    try {
+      COL.list = real.slice(0, 6); COL.preset = collagePreset(); COL.v = 0;
+      showCollage();
+      $('colInfo').textContent = COL.list.length + ' ' + 'фото' + ' · ' + COL.preset.name + (real.length > 6 ? ' · взяты первые 6' : '');
+      $('collage').hidden = false; document.body.classList.add('crop-open');
+      setStatus('');
+    } catch (e) { setStatus((e && e.message) || 'Не получилось собрать коллаж.', true); }
+    busy = false; refresh();
+  }
+  function closeCollage() { $('collage').hidden = true; document.body.classList.remove('crop-open'); COL.canvas = null; COL.list = []; }
+  function colName() { const d = new Date(); return 'kollazh_' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '_' + COL.preset.id + '.jpg'; }
+  async function saveCollage() {
+    if (!COL.canvas) return;
+    try { await saveFile(colName(), await toBlob(COL.canvas)); setStatus(dl ? 'Коллаж сохранён.' : 'Коллаж сохранён в «Загрузки». В галерее ищи альбом Download.'); closeCollage(); }
+    catch (e) { setStatus(errText(e), !(e && e.code === 'declined')); }
+  }
+  async function shareCollage() {
+    if (!COL.canvas) return;
+    try {
+      const blob = await toBlob(COL.canvas), f = new File([blob], colName(), { type: 'image/jpeg' });
+      if (navigator.canShare && !navigator.canShare({ files: [f] })) throw new Error('Телефон не даёт поделиться файлом. Нажми «В галерею».');
+      await navigator.share({ files: [f] });
+    } catch (e) { if (!(e && e.name === 'AbortError')) setStatus((e && e.message) || 'Не получилось поделиться.', true); }
+  }
+  function initCollage() {
+    $('collageBtn').addEventListener('click', openCollage);
+    $('colClose').addEventListener('click', closeCollage);
+    $('colSave').addEventListener('click', saveCollage);
+    $('colShuffle').addEventListener('click', () => { COL.v++; showCollage(); });
+    if (navigator.share && navigator.canShare) { $('colShare').hidden = false; $('colShare').addEventListener('click', shareCollage); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('collage').hidden) closeCollage(); });
+  }
+
   /* ---------- ретушь: размытие и удаление пятен ---------- */
   function opBlur(ctx, W, H, cx, cy, r) {
     const m = Math.ceil(r * 1.7), x0 = Math.max(0, Math.floor(cx - m)), y0 = Math.max(0, Math.floor(cy - m));
