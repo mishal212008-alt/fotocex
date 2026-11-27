@@ -291,6 +291,8 @@ body.crop-open { overflow: hidden; }
 .post-controls label { display: grid; gap: 4px; font-size: 15px; }
 #kktPost button, #kktPost input, #kktPost select { min-height: 48px; font-size: 16px; }
 .post-controls input, .post-controls select { box-sizing: border-box; width: 100%; padding: 8px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.post-controls .post-checkbox { display: flex; align-items: center; gap: 10px; min-height: 48px; }
+#kktPost .post-checkbox input { width: 22px; min-height: 22px; accent-color: #a53818; }
 .post-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .post-slots button { overflow-wrap: anywhere; }
 .post-preview { background: var(--bg); }
@@ -309,7 +311,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 15.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 16.</p>
   </header>
 
   <div class="app">
@@ -515,12 +517,18 @@ body.crop-open { overflow: hidden; }
     <div class="post-controls">
       <label>Стиль
         <select id="postStyle">
-          <option value="frames">Рамки · 4 фото</option>
+          <option value="duet">Дуэт · 2 фото</option>
+          <option value="frames" selected>Рамки · 4 фото</option>
           <option value="diagonal">Диагонали · 3 фото</option>
+          <option value="story">Главный кадр · 3 фото</option>
+          <option value="grid">Фотосетка · 4 фото</option>
+          <option value="report">Фоторепортаж · 5 фото</option>
         </select>
       </label>
       <label>Заголовок <input id="postTitle" maxlength="100" placeholder="Название мероприятия"></label>
       <label>Подпись <input id="postCaption" maxlength="100" value="Камчатский кооперативный техникум"></label>
+      <label>Плашка <input id="postBadge" maxlength="28" placeholder="Например, Новости ККТ"></label>
+      <label class="post-checkbox"><input id="postLogo" type="checkbox" checked> Логотип ККТ</label>
       <button class="btn" id="postUsePhotos" type="button" hidden>Взять фото из редактора</button>
       <div class="post-slots" id="postSlots" aria-label="Фотографии поста"></div>
       <input id="postFile" type="file" accept="image/*" hidden>
@@ -1963,10 +1971,48 @@ body.crop-open { overflow: hidden; }
     const save = $('postSave');
     const status = $('postStatus');
     const pictures = [];
+    const showLogo = $('postLogo');
+    let postLogo = null;
+    let logoLoading = false;
+    async function loadPostLogo() {
+      if (postLogo || logoLoading) return;
+      logoLoading = true;
+      try {
+        postLogo = await loadImg(DEFAULT_LOGO);
+      } catch {
+        status.textContent = 'Логотип не загрузился. Можно снять галочку и сохранить пост.';
+      } finally {
+        logoLoading = false;
+        draw();
+      }
+    }
+
     let slotIndex = 0;
     let loading = false;
     let saving = false;
     const layouts = {
+      duet: [
+        [[-8,334],[166,258],[1090,258],[1090,580],[-8,777]],
+        [[-8,816],[1090,621],[1090,1108],[837,1200],[-8,1200]]
+      ],
+      story: [
+        [[-8,323],[91,256],[1090,256],[1090,744],[-8,744]],
+        [[-8,776],[514,776],[514,1094],[404,1194],[-8,1194]],
+        [[546,776],[1090,776],[1090,1194],[546,1194]]
+      ],
+      grid: [
+        [[-8,318],[58,253],[508,253],[508,692],[-8,692]],
+        [[549,253],[1090,253],[1090,692],[549,692]],
+        [[-8,730],[508,730],[508,1192],[-8,1192]],
+        [[549,730],[1090,730],[1090,1122],[1010,1192],[549,1192]]
+      ],
+      report: [
+        [[-8,306],[61,254],[1090,254],[1090,579],[-8,579]],
+        [[-8,607],[521,607],[521,887],[-8,887]],
+        [[550,607],[1090,607],[1090,887],[550,887]],
+        [[-8,915],[521,915],[521,1195],[-8,1195]],
+        [[550,915],[1090,915],[1090,1136],[1017,1195],[550,1195]]
+      ],
       frames: [
         [[-8,340],[78,253],[550,253],[550,485],[351,700],[-8,700]],
         [[565,418],[731,225],[1090,225],[1090,505],[880,700],[565,700]],
@@ -2048,8 +2094,10 @@ body.crop-open { overflow: hidden; }
     }
 
     function draw() {
-      const frames = $('postStyle').value === 'frames';
-      const layout = layouts[$('postStyle').value];
+      const style = $('postStyle').value;
+      const frames = style === 'frames';
+      const diagonal = style === 'diagonal';
+      const layout = layouts[style];
       const gradient = ctx.createLinearGradient(0, 0, 1080, 1440);
       gradient.addColorStop(0, '#d63a00');
       gradient.addColorStop(.5, '#f55a0a');
@@ -2069,30 +2117,48 @@ body.crop-open { overflow: hidden; }
       // The event title and caption swap positions between the two layouts.
       const title = $('postTitle').value.trim() || 'Название мероприятия';
       const caption = $('postCaption').value.trim();
-      if (frames) {
-        drawText(title, 54, 57, 972, 174, 76);
+      const badge = $('postBadge').value.trim();
+      if (!diagonal) {
+        const titleWidth = !frames && showLogo.checked ? 800 : 972;
+        drawText(title, 54, badge ? 96 : 57, titleWidth, badge ? 148 : 174, 76);
         shape('#a32a10', [[390,1222],[1080,1222],[1080,1440],[229,1440]]);
-        drawText(caption, 403, 1254, 616, 153, 51);
+        if (frames) drawText(caption, 403, 1254, 616, 153, 51);
+        else {
+          shape('#492063', [[0,1222],[1080,1222],[1080,1440],[0,1440]]);
+          drawText(caption, 54, 1254, 972, 153, 55);
+        }
       } else {
         shape('#492063', [[0,38],[1080,38],[1080,215],[0,266]]);
         drawText(caption, 54, 54, 797, 166, 58);
         shape('#a32a10', [[0,1135],[1080,1029],[1080,1440],[0,1440]]);
         shape('#ef510b', [[761,1135],[1080,1058],[1080,1127],[826,1209]]);
-        drawText(title, 54, 1191, 972, 192, 88);
+        drawText(title, 54, badge ? 1218 : 1191, 972, badge ? 180 : 192, 88);
       }
 
-      if (logo) {
-        const [x, y, r] = frames ? [540, 714, 116] : [957, 171, 91];
+      if (badge) {
+        const y = diagonal ? 1150 : 37;
+        ctx.font = '700 34px system-ui, sans-serif';
+        const width = Math.min(650, Math.ceil(ctx.measureText(badge).width) + 40);
+        ctx.fillStyle = '#fff7ed';
+        ctx.fillRect(54, y, width, 48);
+        ctx.fillStyle = '#492063';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        ctx.fillText(badge, 74, y + 24, width - 40);
+      }
+
+      if (showLogo.checked && postLogo) {
+        const [x, y, r] = frames ? [540, 714, 116] : diagonal ? [957, 171, 91] : [951, 134, 84];
         ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
-        const scale = (r * 1.9) / Math.max(logo.width, logo.height);
-        const w = logo.width * scale, h = logo.height * scale;
-        ctx.drawImage(logo, x - w / 2, y - h / 2, w, h);
+        const scale = (r * 1.9) / Math.max(postLogo.width, postLogo.height);
+        const w = postLogo.width * scale, h = postLogo.height * scale;
+        ctx.drawImage(postLogo, x - w / 2, y - h / 2, w, h);
       }
       const count = layout.filter((_, i) => pictures[i]).length;
-      save.disabled = saving || loading || count !== layout.length || !$('postTitle').value.trim();
+      save.disabled = saving || loading || (showLogo.checked && !postLogo) || count !== layout.length || !$('postTitle').value.trim();
       return layout.length;
     }
 
@@ -2109,7 +2175,8 @@ body.crop-open { overflow: hidden; }
       pictures[index] = picture;
     }
 
-    for (let index = 0; index < 4; index++) {
+    const maxSlots = Math.max(...Object.values(layouts).map(layout => layout.length));
+    for (let index = 0; index < maxSlots; index++) {
       slots.append(el('button', { class: 'btn', type: 'button', onclick: () => {
         slotIndex = index;
         file.click();
@@ -2120,11 +2187,17 @@ body.crop-open { overflow: hidden; }
       status.textContent = '';
       refreshSlots();
       dialog.showModal();
+      if (showLogo.checked) loadPostLogo();
     });
     $('postClose').addEventListener('click', () => dialog.close());
     $('postStyle').addEventListener('change', refreshSlots);
     $('postTitle').addEventListener('input', draw);
     $('postCaption').addEventListener('input', draw);
+    $('postBadge').addEventListener('input', draw);
+    showLogo.addEventListener('change', () => {
+      draw();
+      if (showLogo.checked) loadPostLogo();
+    });
     $('postUsePhotos').addEventListener('click', () => {
       if (loading || saving) return;
       const available = photos.filter(photo => !photo.sample);
