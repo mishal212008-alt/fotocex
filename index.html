@@ -292,7 +292,14 @@ body.crop-open { overflow: hidden; }
 #kktPost button, #kktPost input, #kktPost select { min-height: 48px; font-size: 16px; }
 .post-controls input, .post-controls select { box-sizing: border-box; width: 100%; padding: 8px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
 .post-typography { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .65fr); gap: 10px; }
-#postColor { padding: 5px; }
+#kktPost input[type="color"] { padding: 5px; }
+.post-text-settings { min-width: 0; margin: 0; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+#postCropTools { margin-bottom: 12px; }
+#postCropTools p { margin: 0 0 6px; }
+#postCropTools label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#postCropTools input { width: 52%; }
+#postCanvas.post-panning { touch-action: none; cursor: grab; }
+#postSlots button[aria-pressed="true"], #postSwap[aria-pressed="true"] { background: #f5b800; color: #1a1400; }
 .post-controls .post-checkbox { display: flex; align-items: center; gap: 10px; min-height: 48px; }
 #kktPost .post-checkbox input { width: 22px; min-height: 22px; accent-color: #a53818; }
 .post-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -313,7 +320,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 17.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 18.</p>
   </header>
 
   <div class="app">
@@ -529,25 +536,51 @@ body.crop-open { overflow: hidden; }
       </label>
       <label>Заголовок <input id="postTitle" maxlength="100" placeholder="Название мероприятия"></label>
       <label>Подпись <input id="postCaption" maxlength="100" value="Камчатский кооперативный техникум"></label>
+      <fieldset class="post-text-settings"><legend>Оформление заголовка</legend>
       <div class="post-typography">
         <label>Шрифт
-          <select id="postFont">
+          <select id="postTitleFont">
             <option value="bold">Жирный</option>
             <option value="serif">Классический</option>
             <option value="italic">Курсив</option>
             <option value="mono">Моноширинный</option>
           </select>
         </label>
-        <label>Цвет текста <input id="postColor" type="color" value="#ffffff"></label>
+        <label>Цвет текста <input id="postTitleColor" type="color" value="#ffffff"></label>
       </div>
+        <label>Размер <input id="postTitleSize" type="range" min="45" max="140" value="100" aria-label="Размер: оформление заголовка"></label>
+      </fieldset>
+      <fieldset class="post-text-settings"><legend>Оформление подписи</legend>
+      <div class="post-typography">
+        <label>Шрифт
+          <select id="postCaptionFont">
+            <option value="bold">Жирный</option>
+            <option value="serif">Классический</option>
+            <option value="italic">Курсив</option>
+            <option value="mono">Моноширинный</option>
+          </select>
+        </label>
+        <label>Цвет текста <input id="postCaptionColor" type="color" value="#ffffff"></label>
+      </div>
+        <label>Размер <input id="postCaptionSize" type="range" min="45" max="140" value="100" aria-label="Размер: оформление подписи"></label>
+      </fieldset>
       <label>Плашка <input id="postBadge" maxlength="28" placeholder="Например, Новости ККТ"></label>
       <label class="post-checkbox"><input id="postLogo" type="checkbox" checked> Логотип ККТ</label>
       <button class="btn" id="postUsePhotos" type="button" hidden>Взять фото из редактора</button>
       <div class="post-slots" id="postSlots" aria-label="Фотографии поста"></div>
+      <button class="btn" id="postSwap" type="button" aria-pressed="false" disabled>Поменять фото местами</button>
       <input id="postFile" type="file" accept="image/*" hidden>
       <p id="postStatus" role="status"></p>
     </div>
     <div class="post-preview">
+      <div id="postCropTools" hidden>
+        <p id="postCropLabel"></p>
+        <label>Приближение <input id="postZoom" type="range" min="100" max="250" value="100"></label>
+        <label>По горизонтали <input id="postPanX" type="range" min="0" max="100" value="50"></label>
+        <label>По вертикали <input id="postPanY" type="range" min="0" max="100" value="50"></label>
+        <button class="btn" id="postReplace" type="button">Заменить фото</button>
+        <button class="btn" id="postCropDone" type="button">Готово</button>
+      </div>
       <canvas id="postCanvas" width="1080" height="1440" role="img" aria-label="Предпросмотр поста ККТ"></canvas>
       <button class="btn primary" id="postSave" type="button" disabled>Скачать JPG</button>
     </div>
@@ -2001,6 +2034,15 @@ body.crop-open { overflow: hidden; }
     }
 
     let slotIndex = 0;
+    let editing = -1;
+    let swapping = false;
+    let swapFrom = -1;
+    let drag = null;
+    const cropTools = $('postCropTools');
+    const swap = $('postSwap');
+    const zoom = $('postZoom');
+    const panX = $('postPanX');
+    const panY = $('postPanY');
     let loading = false;
     let saving = false;
     const layouts = {
@@ -2051,18 +2093,30 @@ body.crop-open { overflow: hidden; }
       ctx.fill();
     }
 
-    function drawPicture(points, picture, index) {
+    function bounds(points) {
       const xs = points.map(([x]) => x);
       const ys = points.map(([, y]) => y);
       const x = Math.min(...xs), y = Math.min(...ys);
       const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+      return { x, y, w, h };
+    }
+
+    function cropFor(picture, w, h) {
+      const { source, focus } = picture;
+      const [, , baseW, baseH] = coverRect(source.width, source.height, w / h, .5, .5);
+      const cw = baseW / (picture.zoom || 1), ch = baseH / (picture.zoom || 1);
+      return [clamp(focus.x * source.width - cw / 2, 0, source.width - cw),
+        clamp(focus.y * source.height - ch / 2, 0, source.height - ch), cw, ch];
+    }
+
+    function drawPicture(points, picture, index) {
+      const { x, y, w, h } = bounds(points);
       polygon(points);
       ctx.save();
       ctx.clip();
       if (picture) {
         const source = picture.source;
-        const focus = picture.focus;
-        const crop = coverRect(source.width, source.height, w / h, focus.x, focus.y);
+        const crop = cropFor(picture, w, h);
         ctx.drawImage(source, ...crop, x, y, w, h);
       } else {
         ctx.fillStyle = '#eae0ef';
@@ -2087,8 +2141,11 @@ body.crop-open { overflow: hidden; }
       italic: ['italic 700', 'Georgia, serif'],
       mono: ['700', 'monospace']
     };
-    function drawText(text, x, y, width, height, maxSize) {
-      const [weight, family] = fonts[$('postFont').value];
+    function drawText(text, x, y, width, height, maxSize, field) {
+      if (!text) return;
+      const [weight, family] = fonts[$(field + 'Font').value];
+      const color = $(field + 'Color').value;
+      maxSize = Math.max(24, Math.round(maxSize * Number($(field + 'Size').value) / 100));
       for (let size = maxSize; size >= 24; size -= 2) {
         ctx.font = weight + ' ' + size + 'px ' + family;
         const lines = [];
@@ -2105,7 +2162,7 @@ body.crop-open { overflow: hidden; }
         lines.push(line);
         const step = Math.ceil(size * 1.12);
         if (lines.length * step > height && size > 25) continue;
-        ctx.fillStyle = $('postColor').value;
+        ctx.fillStyle = color;
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
         lines.forEach((value, i) => ctx.fillText(value, x, y + i * step, width));
@@ -2140,19 +2197,19 @@ body.crop-open { overflow: hidden; }
       const badge = $('postBadge').value.trim();
       if (!diagonal) {
         const titleWidth = !frames && showLogo.checked ? 800 : 972;
-        drawText(title, 54, badge ? 96 : 57, titleWidth, badge ? 148 : 174, 76);
+        drawText(title, 54, badge ? 96 : 57, titleWidth, badge ? 148 : 174, 76, 'postTitle');
         shape('#a32a10', [[390,1222],[1080,1222],[1080,1440],[229,1440]]);
-        if (frames) drawText(caption, 403, 1254, 616, 153, 51);
+        if (frames) drawText(caption, 403, 1254, 616, 153, 51, 'postCaption');
         else {
           shape('#492063', [[0,1222],[1080,1222],[1080,1440],[0,1440]]);
-          drawText(caption, 54, 1254, 972, 153, 55);
+          drawText(caption, 54, 1254, 972, 153, 55, 'postCaption');
         }
       } else {
         shape('#492063', [[0,38],[1080,38],[1080,215],[0,266]]);
-        drawText(caption, 54, 54, 797, 166, 58);
+        drawText(caption, 54, 54, 797, 166, 58, 'postCaption');
         shape('#a32a10', [[0,1135],[1080,1029],[1080,1440],[0,1440]]);
         shape('#ef510b', [[761,1135],[1080,1058],[1080,1127],[826,1209]]);
-        drawText(title, 54, badge ? 1218 : 1191, 972, badge ? 180 : 192, 88);
+        drawText(title, 54, badge ? 1218 : 1191, 972, badge ? 180 : 192, 88, 'postTitle');
       }
 
       if (badge) {
@@ -2184,24 +2241,113 @@ body.crop-open { overflow: hidden; }
 
     function refreshSlots() {
       const count = draw();
+      if (editing >= count) editing = -1;
+      const canSwap = pictures.slice(0, count).filter(Boolean).length >= 2;
+      if (!canSwap) { swapping = false; swapFrom = -1; }
+      swap.disabled = loading || saving || !canSwap;
+      swap.setAttribute('aria-pressed', String(swapping));
       for (const [index, button] of Array.from(slots.children).entries()) {
         button.hidden = index >= count;
-        button.textContent = pictures[index] ? 'Заменить фото ' + (index + 1) : 'Добавить фото ' + (index + 1);
-        button.disabled = loading || saving;
+        button.textContent = pictures[index]
+          ? (swapping ? 'Фото ' : 'Настроить фото ') + (index + 1)
+          : 'Добавить фото ' + (index + 1);
+        button.disabled = loading || saving || (swapping && !pictures[index]);
+        button.setAttribute('aria-pressed', String(index === (swapping ? swapFrom : editing)));
+      }
+      cropTools.hidden = editing === -1;
+      canvas.classList.toggle('post-panning', editing !== -1);
+      if (editing !== -1) {
+        $('postCropLabel').textContent = 'Фото ' + (editing + 1) + ' · Подвинь снимок на предпросмотре';
+        syncCropControls();
       }
     }
 
-    function setPicture(index, picture) {
-      pictures[index] = picture;
+    function syncCropControls() {
+      const picture = pictures[editing];
+      zoom.value = Math.round((picture.zoom || 1) * 100);
+      panX.value = Math.round(picture.focus.x * 100);
+      panY.value = Math.round(picture.focus.y * 100);
+    }
+
+    function pickFile(index) {
+      slotIndex = index;
+      file.click();
+    }
+
+    function chooseSlot(index) {
+      if (swapping) {
+        if (swapFrom === -1) {
+          swapFrom = index;
+          status.textContent = 'Выбери второе фото.';
+        } else {
+          if (swapFrom !== index) {
+            [pictures[swapFrom], pictures[index]] = [pictures[index], pictures[swapFrom]];
+            status.textContent = 'Фото поменялись местами.';
+          } else status.textContent = 'Обмен отменён.';
+          swapping = false;
+          swapFrom = -1;
+        }
+        refreshSlots();
+      } else if (pictures[index]) {
+        editing = index;
+        refreshSlots();
+        zoom.focus({ preventScroll: true });
+        cropTools.scrollIntoView({ block: 'start' });
+      } else {
+        pickFile(index);
+      }
     }
 
     const maxSlots = Math.max(...Object.values(layouts).map(layout => layout.length));
     for (let index = 0; index < maxSlots; index++) {
-      slots.append(el('button', { class: 'btn', type: 'button', onclick: () => {
-        slotIndex = index;
-        file.click();
-      } }));
+      slots.append(el('button', { class: 'btn', type: 'button', onclick: () => chooseSlot(index) }));
     }
+    swap.addEventListener('click', () => {
+      editing = -1;
+      swapping = !swapping;
+      swapFrom = -1;
+      status.textContent = swapping ? 'Выбери первое фото.' : '';
+      refreshSlots();
+    });
+    $('postReplace').addEventListener('click', () => pickFile(editing));
+    $('postCropDone').addEventListener('click', () => {
+      const index = editing;
+      editing = -1;
+      refreshSlots();
+      slots.children[index].focus();
+    });
+    zoom.addEventListener('input', () => {
+      pictures[editing].zoom = Number(zoom.value) / 100;
+      draw();
+    });
+    for (const [control, axis] of [[panX, 'x'], [panY, 'y']]) {
+      control.addEventListener('input', () => {
+        pictures[editing].focus[axis] = Number(control.value) / 100;
+        draw();
+      });
+    }
+    canvas.addEventListener('pointerdown', event => {
+      if (editing === -1 || drag || event.button !== 0) return;
+      const picture = pictures[editing];
+      const { w, h } = bounds(layouts[$('postStyle').value][editing]);
+      const [x, y, cw, ch] = cropFor(picture, w, h);
+      const rect = canvas.getBoundingClientRect();
+      drag = { id: event.pointerId, picture, x, y, cw, ch,
+        clientX: event.clientX, clientY: event.clientY,
+        scaleX: cw * canvas.width / (w * rect.width),
+        scaleY: ch * canvas.height / (h * rect.height) };
+      canvas.setPointerCapture(event.pointerId);
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (!drag || drag.id !== event.pointerId || pictures[editing] !== drag.picture) return;
+      const { picture, x, y, cw, ch } = drag;
+      const { width, height } = picture.source;
+      picture.focus.x = (clamp(x - (event.clientX - drag.clientX) * drag.scaleX, 0, width - cw) + cw / 2) / width;
+      picture.focus.y = (clamp(y - (event.clientY - drag.clientY) * drag.scaleY, 0, height - ch) + ch / 2) / height;
+      syncCropControls();
+      draw();
+    });
+    canvas.addEventListener('lostpointercapture', () => { drag = null; });
     $('postBtn').addEventListener('click', () => {
       $('postUsePhotos').hidden = !photos.some(photo => !photo.sample);
       status.textContent = '';
@@ -2210,13 +2356,22 @@ body.crop-open { overflow: hidden; }
       if (showLogo.checked) loadPostLogo();
     });
     $('postClose').addEventListener('click', () => dialog.close());
-    $('postStyle').addEventListener('change', refreshSlots);
+    $('postStyle').addEventListener('change', () => {
+      editing = -1;
+      swapping = false;
+      swapFrom = -1;
+      status.textContent = '';
+      refreshSlots();
+    });
     $('postTitle').addEventListener('input', draw);
     $('postCaption').addEventListener('input', draw);
     $('postBadge').addEventListener('input', draw);
-    $('postFont').addEventListener('change', draw);
-    $('postColor').addEventListener('input', draw);
-    $('postColor').addEventListener('change', draw);
+    for (const field of ['postTitle', 'postCaption']) {
+      $(field + 'Font').addEventListener('change', draw);
+      $(field + 'Color').addEventListener('input', draw);
+      $(field + 'Color').addEventListener('change', draw);
+      $(field + 'Size').addEventListener('input', draw);
+    }
     showLogo.addEventListener('change', () => {
       draw();
       if (showLogo.checked) loadPostLogo();
@@ -2226,7 +2381,7 @@ body.crop-open { overflow: hidden; }
       const available = photos.filter(photo => !photo.sample);
       const count = layouts[$('postStyle').value].length;
       for (const [index, photo] of available.slice(0, count).entries()) {
-        setPicture(index, { source: makeSmall(photo.src), focus: { ...photo.focus } });
+        pictures[index] = { source: makeSmall(photo.src), focus: { ...photo.focus } };
       }
       status.textContent = 'Добавлено из редактора: ' + Math.min(available.length, count);
       refreshSlots();
@@ -2242,7 +2397,7 @@ body.crop-open { overflow: hidden; }
       try {
         const source = await decode(selected);
         try {
-          setPicture(index, { source: makeSmall(source), focus: { x: .5, y: .5 } });
+          pictures[index] = { source: makeSmall(source), focus: { x: .5, y: .5 } };
         } finally {
           source.close();
         }
