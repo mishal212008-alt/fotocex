@@ -320,7 +320,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 18.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 19.</p>
   </header>
 
   <div class="app">
@@ -517,6 +517,46 @@ body.crop-open { overflow: hidden; }
   </div>
 </div>
 
+<style>
+.light-entry { width: 100%; min-height: 44px; }
+#lightEditor { box-sizing: border-box; width: min(620px, calc(100% - 16px)); max-height: 94dvh; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); }
+#lightEditor::backdrop { background: #000a; }
+#lightEditor h2 { margin: 0 0 10px; }
+#lightEditor button, #lightEditor input { min-height: 44px; font-size: 16px; }
+.light-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.light-actions button { flex: 1 1 auto; }
+#lightEditor button[aria-pressed="true"] { background: #f5b800; color: #15171c; }
+#lightPreview { display: block; width: auto; height: auto; max-width: 100%; max-height: 40dvh; margin: auto; }
+#lightEditor label { display: grid; grid-template-columns: 7em minmax(0, 1fr); align-items: center; gap: 6px; }
+#lightEditor input { width: 100%; }
+#lightHint { margin: 6px 0; }
+</style>
+<dialog id="lightEditor" aria-labelledby="lightTitle">
+  <h2 id="lightTitle">Свет и геометрия</h2>
+  <div class="light-actions" aria-label="Режим">
+    <button class="btn" id="lightMode" type="button">Против окна</button>
+    <button class="btn" id="geometryMode" type="button">Групповое фото</button>
+  </div>
+  <canvas id="lightPreview" role="img" aria-label="Предпросмотр фото"></canvas>
+  <div id="lightControls">
+    <div class="light-actions" aria-label="Зона на фото">
+      <button class="btn" id="lightChoosePerson" type="button">Выбрать человека</button>
+      <button class="btn" id="lightChooseWindow" type="button">Отметить окно</button>
+      <button class="btn" id="lightAll" type="button">Вся группа</button>
+    </div>
+    <label>Люди <input id="lightPeople" type="range" min="0" max="100" value="0"></label>
+    <label>Окна <input id="lightWindows" type="range" min="0" max="100" value="0"></label>
+    <label>Помещение <input id="lightRoom" type="range" min="-100" max="100" value="0"></label>
+  </div>
+  <div id="geometryControls" hidden>
+    <label>Коррекция краёв <input id="lightEdges" type="range" min="0" max="100" value="0"></label>
+  </div>
+  <p id="lightHint" role="status"></p>
+  <div class="light-actions">
+    <button class="btn primary" id="lightApply" type="button">Применить</button>
+    <button class="btn" id="lightCancel" type="button">Отмена</button>
+  </div>
+</dialog>
 <dialog id="kktPost" aria-labelledby="postHeading">
   <header class="post-head">
     <h2 id="postHeading">Пост ККТ</h2>
@@ -1017,7 +1057,8 @@ body.crop-open { overflow: hidden; }
         p.sample ? null : el('div', { class: 'toolrow' },
           el('button', { class: 'btn small', type: 'button', text: 'Обрезать', onclick: () => openCrop(p) }),
           el('button', { class: 'btn small', type: 'button', text: 'Ретушь', onclick: () => openRetouch(p) })),
-        p.preRetouch ? el('button', { class: 'linkbtn', type: 'button', text: 'Отменить ретушь', onclick: () => undoRetouch(p) }) : null,
+        p.sample ? null : el('button', { class: 'btn small light-entry', type: 'button', text: 'Свет и геометрия', onclick: () => openLight(p) }),
+        p.preRetouch ? el('button', { class: 'linkbtn', type: 'button', text: p.lightAdjusted ? 'Отменить обработку' : 'Отменить ретушь', onclick: () => undoRetouch(p) }) : null,
         p.cropped ? el('button', { class: 'linkbtn', type: 'button', text: 'Вернуть оригинал', onclick: () => restoreOriginal(p) }) : null,
         el('button', { class: 'linkbtn', type: 'button', text: 'Вернуть автоцентр', onclick: () => { p.focus = { x: p.autoFocus.x, y: p.autoFocus.y }; p.manual = false; placeXhair(p); schedule(p); } }),
         el('button', { class: 'linkbtn', type: 'button', text: 'Убрать фото', onclick: () => removePhoto(p) })
@@ -1706,7 +1747,9 @@ body.crop-open { overflow: hidden; }
     const f = p.focus, m = p.manual;
     p.src = p.preRetouch; p.w = p.src.width; p.h = p.src.height; p.small = makeSmall(p.src); analyze(p);
     p.focus = f; p.manual = m; p.retouched = false; p.preRetouch = null;
-    buildList(); setStatus('Ретушь отменена.');
+    const wasLightAdjusted = p.lightAdjusted;
+    p.lightAdjusted = false;
+    buildList(); setStatus(wasLightAdjusted ? 'Обработка отменена.' : 'Ретушь отменена.');
   }
   function applyRetouch() {
     const p = RT.p, ops = RT.ops.slice();
@@ -2424,6 +2467,217 @@ body.crop-open { overflow: hidden; }
       }
     });
   }
+  const lightDialog = $('lightEditor');
+  const lightPreview = $('lightPreview');
+  const lightRanges = ['lightPeople', 'lightWindows', 'lightRoom', 'lightEdges'];
+  let lightEdit = null;
+
+  function exposureMask(x, y, region) {
+    const dx = (x - region.x) / region.rx, dy = (y - region.y) / region.ry;
+    return Math.max(0, 1 - dx * dx - dy * dy) ** 2;
+  }
+
+  function correctLight(source, edit) {
+    const canvas = document.createElement('canvas');
+    const W = canvas.width = source.width, H = canvas.height = source.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(source, 0, 0);
+    const { people, windows, room, faces, individual, windowArea } = edit;
+    if (!people && !windows && !room && !individual.some(item => item.amount)) return canvas;
+    const pixels = ctx.getImageData(0, 0, W, H);
+    const d = pixels.data;
+    const group = faces.length ? faces : [{ x: .5, y: .62, rx: .58, ry: .48 }];
+    for (let y = 0, i = 0; y < H; y++) {
+      const fy = (y + .5) / H;
+      for (let x = 0; x < W; x++, i += 4) {
+        const fx = (x + .5) / W;
+        let subject = 0, local = 0;
+        for (const face of group) subject = Math.max(subject, exposureMask(fx, fy, face));
+        for (const item of individual) {
+          const weight = exposureMask(fx, fy, item.region);
+          local = Math.max(local, weight * item.amount);
+          subject = Math.max(subject, weight);
+        }
+        const luma = (.2126 * d[i] + .7152 * d[i + 1] + .0722 * d[i + 2]) / 255;
+        const highlight = clamp((luma - .64) / .36, 0, 1);
+        const glass = highlight * (windowArea ? exposureMask(fx, fy, windowArea) : 1 - subject);
+        const lift = Math.max(people * subject, local) * (1 - highlight) * .65;
+        const ambient = room * (1 - subject) * (1 - glass) * .26;
+        for (let channel = 0; channel < 3; channel++) {
+          const value = d[i + channel];
+          d[i + channel] = value + (255 - value) * (lift + Math.max(0, ambient)) +
+            value * (Math.min(0, ambient) - windows * glass * .23);
+        }
+      }
+    }
+    ctx.putImageData(pixels, 0, 0);
+    return canvas;
+  }
+
+  function correctEdges(source, strength) {
+    const canvas = document.createElement('canvas');
+    const W = canvas.width = source.width, H = canvas.height = source.height;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    const strips = Math.min(480, W);
+    const map = x => {
+      const u = 2 * x / W - 1;
+      return (1 + u + strength * .28 * (u ** 3 - u)) * W / 2;
+    };
+    for (let i = 0; i < strips; i++) {
+      const x = Math.round(i * W / strips), right = Math.round((i + 1) * W / strips);
+      const leftSource = Math.max(0, map(x)), rightSource = Math.min(W, map(right));
+      ctx.drawImage(source, leftSource, 0, rightSource - leftSource, H, x, 0, right - x, H);
+    }
+    return canvas;
+  }
+
+  function renderLight(source, edit) {
+    const corrected = correctLight(source, edit);
+    return edit.edges ? correctEdges(corrected, edit.edges) : corrected;
+  }
+
+  function drawLightPreview() {
+    const edit = lightEdit;
+    if (!edit) return;
+    const result = edit.geometry ? renderLight(edit.preview, edit) : correctLight(edit.preview, edit);
+    const W = lightPreview.width = result.width, H = lightPreview.height = result.height;
+    const ctx = lightPreview.getContext('2d');
+    ctx.drawImage(result, 0, 0);
+    if (edit.geometry) return;
+    for (const region of [edit.selected, edit.windowArea]) {
+      if (!region) continue;
+      ctx.strokeStyle = '#ffcc33';
+      ctx.lineWidth = Math.max(2, W / 220);
+      ctx.beginPath();
+      ctx.ellipse(region.x * W, region.y * H, region.rx * W * .62, region.ry * H * .62, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  function lightMode(geometry) {
+    lightEdit.geometry = geometry;
+    $('lightControls').hidden = geometry;
+    $('geometryControls').hidden = !geometry;
+    $('lightMode').setAttribute('aria-pressed', String(!geometry));
+    $('geometryMode').setAttribute('aria-pressed', String(geometry));
+    $('lightHint').textContent = geometry
+      ? 'Начни с небольшой коррекции. Смотри на лица у краёв и прямые линии.'
+      : 'Настрой всю группу или выбери человека на фото. Окно можно отметить вручную.';
+    drawLightPreview();
+  }
+
+  function openLight(p) {
+    const preview = document.createElement('canvas');
+    const scale = Math.min(1, 600 / Math.max(p.src.width, p.src.height));
+    preview.width = Math.max(1, Math.round(p.src.width * scale));
+    preview.height = Math.max(1, Math.round(p.src.height * scale));
+    preview.getContext('2d').drawImage(p.src, 0, 0, preview.width, preview.height);
+    const edit = lightEdit = { p, source: p.src, preview, people: 0, windows: 0, room: 0, edges: 0,
+      faces: [], individual: [], selected: null, windowArea: null, target: 'person' };
+    for (const id of lightRanges) $(id).value = '0';
+    setLightTarget('person');
+    lightDialog.showModal();
+    lightMode(false);
+    if (!('FaceDetector' in window)) return;
+    (async () => {
+      try {
+        const detected = await new window.FaceDetector({ fastMode: true, maxDetectedFaces: 12 }).detect(preview);
+        if (lightEdit !== edit) return;
+        const W = preview.width, H = preview.height;
+        edit.faces = detected.map(({ boundingBox: b }) => ({
+          x: (b.x + b.width / 2) / W, y: (b.y + b.height * .82) / H,
+          rx: Math.max(.045, b.width / W * .95), ry: Math.max(.07, b.height / H * 1.35)
+        }));
+        drawLightPreview();
+      } catch { /* Ручной выбор доступен в любом браузере. */ }
+    })();
+  }
+
+  function setLightTarget(target) {
+    lightEdit.target = target;
+    $('lightChoosePerson').setAttribute('aria-pressed', String(target === 'person'));
+    $('lightChooseWindow').setAttribute('aria-pressed', String(target === 'window'));
+  }
+
+  $('lightMode').addEventListener('click', () => lightMode(false));
+  $('geometryMode').addEventListener('click', () => lightMode(true));
+  $('lightChoosePerson').addEventListener('click', () => {
+    setLightTarget('person');
+    $('lightHint').textContent = 'Нажми на человека на фото и настрой ползунок «Люди».';
+  });
+  $('lightChooseWindow').addEventListener('click', () => {
+    setLightTarget('window');
+    $('lightHint').textContent = 'Нажми на яркую часть окна и настрой ползунок «Окна».';
+  });
+  $('lightAll').addEventListener('click', () => {
+    lightEdit.selected = null;
+    $('lightPeople').value = String(lightEdit.people * 100);
+    setLightTarget('person');
+    drawLightPreview();
+  });
+  lightPreview.addEventListener('click', event => {
+    const edit = lightEdit;
+    if (!edit || edit.geometry) return;
+    const rect = lightPreview.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width, y = (event.clientY - rect.top) / rect.height;
+    if (edit.target === 'window') {
+      edit.windowArea = { x, y, rx: .34, ry: .42 };
+    } else {
+      const candidates = [...edit.individual.map(item => item.region), ...edit.faces];
+      const region = candidates.reduce((best, item) =>
+        exposureMask(x, y, item) > (best ? exposureMask(x, y, best) : 0) ? item : best, null);
+      edit.selected = region === edit.selected && region ? null : region || { x, y, rx: .16, ry: .25 };
+      const current = edit.individual.find(item => item.region === edit.selected);
+      $('lightPeople').value = String((edit.selected ? current?.amount || 0 : edit.people) * 100);
+    }
+    drawLightPreview();
+  });
+  let lightFrame = 0;
+  for (const id of lightRanges) {
+    $(id).addEventListener('input', () => {
+      const edit = lightEdit;
+      const amount = Number($(id).value) / 100;
+      if (id === 'lightPeople' && edit.selected) {
+        const prior = edit.individual.find(item => item.region === edit.selected);
+        if (prior) prior.amount = amount;
+        else edit.individual.push({ region: edit.selected, amount });
+      } else {
+        const field = id.slice(5).toLowerCase();
+        edit[field] = amount;
+      }
+      cancelAnimationFrame(lightFrame);
+      lightFrame = requestAnimationFrame(drawLightPreview);
+    });
+  }
+  $('lightCancel').addEventListener('click', () => lightDialog.close());
+  lightDialog.addEventListener('close', () => { lightEdit = null; });
+  $('lightApply').addEventListener('click', () => {
+    const edit = lightEdit;
+    if (!edit) return;
+    const { p, source, people, windows, room, edges, individual } = edit;
+    if (p.src !== source || !(people || windows || room || edges || individual.some(item => item.amount))) {
+      lightDialog.close();
+      return;
+    }
+    try {
+      const result = renderLight(source, edit);
+      const small = makeSmall(result);
+      if (!p.preRetouch) p.preRetouch = source;
+      p.src = result;
+      p.small = small;
+      p.retouched = true;
+      p.lightAdjusted = true;
+      const focus = p.focus, manual = p.manual;
+      analyze(p);
+      p.focus = focus; p.manual = manual;
+      lightDialog.close();
+      buildList();
+      setStatus('Свет и геометрия применены. Для возврата используй «Отменить обработку».');
+    } catch {
+      $('lightHint').textContent = 'Не удалось обработать фото. Попробуй снимок меньшего размера.';
+    }
+  });
   initKktPost();
   initPanel();
   initBrand();
