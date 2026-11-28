@@ -291,6 +291,8 @@ body.crop-open { overflow: hidden; }
 .post-controls label { display: grid; gap: 4px; font-size: 15px; }
 #kktPost button, #kktPost input, #kktPost select { min-height: 48px; font-size: 16px; }
 .post-controls input, .post-controls select { box-sizing: border-box; width: 100%; padding: 8px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+.post-typography { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .65fr); gap: 10px; }
+#postColor { padding: 5px; }
 .post-controls .post-checkbox { display: flex; align-items: center; gap: 10px; min-height: 48px; }
 #kktPost .post-checkbox input { width: 22px; min-height: 22px; accent-color: #a53818; }
 .post-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -311,7 +313,7 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 16.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 17.</p>
   </header>
 
   <div class="app">
@@ -527,6 +529,17 @@ body.crop-open { overflow: hidden; }
       </label>
       <label>Заголовок <input id="postTitle" maxlength="100" placeholder="Название мероприятия"></label>
       <label>Подпись <input id="postCaption" maxlength="100" value="Камчатский кооперативный техникум"></label>
+      <div class="post-typography">
+        <label>Шрифт
+          <select id="postFont">
+            <option value="bold">Жирный</option>
+            <option value="serif">Классический</option>
+            <option value="italic">Курсив</option>
+            <option value="mono">Моноширинный</option>
+          </select>
+        </label>
+        <label>Цвет текста <input id="postColor" type="color" value="#ffffff"></label>
+      </div>
       <label>Плашка <input id="postBadge" maxlength="28" placeholder="Например, Новости ККТ"></label>
       <label class="post-checkbox"><input id="postLogo" type="checkbox" checked> Логотип ККТ</label>
       <button class="btn" id="postUsePhotos" type="button" hidden>Взять фото из редактора</button>
@@ -2068,9 +2081,16 @@ body.crop-open { overflow: hidden; }
       }
     }
 
+    const fonts = {
+      bold: ['800', 'system-ui, sans-serif'],
+      serif: ['700', 'Georgia, serif'],
+      italic: ['italic 700', 'Georgia, serif'],
+      mono: ['700', 'monospace']
+    };
     function drawText(text, x, y, width, height, maxSize) {
+      const [weight, family] = fonts[$('postFont').value];
       for (let size = maxSize; size >= 24; size -= 2) {
-        ctx.font = '800 ' + size + 'px system-ui, sans-serif';
+        ctx.font = weight + ' ' + size + 'px ' + family;
         const lines = [];
         let line = '';
         for (const word of text.split(/\s+/)) {
@@ -2085,7 +2105,7 @@ body.crop-open { overflow: hidden; }
         lines.push(line);
         const step = Math.ceil(size * 1.12);
         if (lines.length * step > height && size > 25) continue;
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = $('postColor').value;
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
         lines.forEach((value, i) => ctx.fillText(value, x, y + i * step, width));
@@ -2194,6 +2214,9 @@ body.crop-open { overflow: hidden; }
     $('postTitle').addEventListener('input', draw);
     $('postCaption').addEventListener('input', draw);
     $('postBadge').addEventListener('input', draw);
+    $('postFont').addEventListener('change', draw);
+    $('postColor').addEventListener('input', draw);
+    $('postColor').addEventListener('change', draw);
     showLogo.addEventListener('change', () => {
       draw();
       if (showLogo.checked) loadPostLogo();
