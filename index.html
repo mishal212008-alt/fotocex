@@ -65,6 +65,8 @@ h1 { font: 600 26px/1.1 var(--f-display); letter-spacing: -0.01em; margin: 0 0 6
 
 .sec { padding-top: 18px; display: flex; flex-direction: column; gap: 12px; }
 .sec + .sec { border-top: 1px solid var(--line); margin-top: 18px; }
+.setting-label, .row label:has(.setting-icon) { display: inline-flex; align-items: center; gap: 6px; }
+.setting-icon { width: 16px; height: 16px; flex: 0 0 16px; color: var(--mute); vertical-align: middle; }
 .label { font: 500 11px/1 var(--f-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--mute); margin: 0; }
 
 .formats { display: flex; flex-direction: column; gap: 6px; }
@@ -320,26 +322,26 @@ body.crop-open { overflow: hidden; }
       <h1>Фотоцех</h1>
       <p class="lede">Кидаешь фото, получаешь готовые кадры для постов, сторис и превью: обрезка, цвет и подпись делаются сами.</p>
     </div>
-    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 19.</p>
+    <p class="privacy mono">Фото никуда не загружаются. Всё считается в твоём браузере. Версия 20.</p>
   </header>
 
   <div class="app">
     <aside class="panel" aria-label="Настройки" id="panel">
       <div class="sheetbar"><strong>Настройки</strong><button class="btn small" id="sheetDone" type="button">Готово</button></div>
       <section class="sec">
-        <h2 class="label">Наборы</h2>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 5 3-5 3-5-3zM3 9l5 3 5-3m-10 3 5 3 5-3"/></svg>Наборы</span></h2>
         <div class="chips" id="presets"></div>
         <button class="linkbtn" id="saveMine" type="button">Запомнить текущие настройки как «Мой набор»</button>
         <p class="hint">Единый стиль ККТ для ВК: значок, знак «МЕДИА ККТ», цвет и форматы. Он стоит по умолчанию. Нажми «ККТ · ВК», чтобы вернуть его после правок.</p>
       </section>
 
       <section class="sec">
-        <h2 class="label">Форматы</h2>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M6 3v10"/></svg>Форматы</span></h2>
         <div id="formats" class="formats"></div>
       </section>
 
       <section class="sec">
-        <h2 class="label">Кадрирование</h2>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1v11h11M1 4h11v11"/></svg>Кадрирование</span></h2>
         <div class="seg" id="mode">
           <label><input class="sr" type="radio" name="mode" value="fill"> Заполнить кадр</label>
           <label><input class="sr" type="radio" name="mode" value="blur"> Целиком, фон размыт</label>
@@ -348,22 +350,22 @@ body.crop-open { overflow: hidden; }
       </section>
 
       <section class="sec">
-        <h2 class="label">Цвет</h2>
-        <div class="row"><label for="auto">Авто-улучшение</label><output id="o-auto" class="mono"></output><input id="auto" type="range" min="0" max="100" step="1"></div>
-        <div class="row"><label for="sharp">Резкость</label><output id="o-sharp" class="mono"></output><input id="sharp" type="range" min="0" max="100" step="1"></div>
-        <div class="row"><label for="nature">Небо и зелень</label><output id="o-nature" class="mono"></output><input id="nature" type="range" min="0" max="100" step="1"></div>
-        <div class="row"><label for="denoise">Шум в тёмном</label><output id="o-denoise" class="mono"></output><input id="denoise" type="range" min="0" max="100" step="1"></div>
-        <div class="row"><label for="shadow">Тени и света</label><output id="o-shadow" class="mono"></output><input id="shadow" type="range" min="0" max="100" step="1"></div>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="3"/><circle cx="5" cy="10" r="3"/><circle cx="11" cy="10" r="3"/></svg>Цвет</span></h2>
+        <div class="row"><label for="auto"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="m3 13 9-9m-3 3 3 3M4 2v4M2 4h4m7 7v4m-2-2h4"/></svg>Авто-улучшение</label><output id="o-auto" class="mono"></output><input id="auto" type="range" min="0" max="100" step="1"></div>
+        <div class="row"><label for="sharp"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="m8 2 6 11H2z"/></svg>Резкость</label><output id="o-sharp" class="mono"></output><input id="sharp" type="range" min="0" max="100" step="1"></div>
+        <div class="row"><label for="nature"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3c-7-1-11 2-10 7s12 3 10-7ZM3 13l6-6"/></svg>Небо и зелень</label><output id="o-nature" class="mono"></output><input id="nature" type="range" min="0" max="100" step="1"></div>
+        <div class="row"><label for="denoise"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M4 8h8m-6 3h4"/></svg>Шум в тёмном</label><output id="o-denoise" class="mono"></output><input id="denoise" type="range" min="0" max="100" step="1"></div>
+        <div class="row"><label for="shadow"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5v11"/></svg>Тени и света</label><output id="o-shadow" class="mono"></output><input id="shadow" type="range" min="0" max="100" step="1"></div>
         <div class="chips" id="styles" role="group" aria-label="Стиль"></div>
-        <div class="row"><label for="bright">Яркость</label><output id="o-bright" class="mono"></output><input id="bright" type="range" min="-50" max="50" step="1"></div>
-        <div class="row"><label for="con">Контраст</label><output id="o-con" class="mono"></output><input id="con" type="range" min="-50" max="50" step="1"></div>
-        <div class="row"><label for="sat">Насыщенность</label><output id="o-sat" class="mono"></output><input id="sat" type="range" min="-50" max="50" step="1"></div>
-        <div class="row"><label for="warm">Теплота</label><output id="o-warm" class="mono"></output><input id="warm" type="range" min="-50" max="50" step="1"></div>
+        <div class="row"><label for="bright"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1v2m0 10v2M1 8h2m10 0h2M3 3l1 1m8 8 1 1M13 3l-1 1m-8 8-1 1"/></svg>Яркость</label><output id="o-bright" class="mono"></output><input id="bright" type="range" min="-50" max="50" step="1"></div>
+        <div class="row"><label for="con"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor"/></svg>Контраст</label><output id="o-con" class="mono"></output><input id="con" type="range" min="-50" max="50" step="1"></div>
+        <div class="row"><label for="sat"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2c2 3 5 6 5 8a5 5 0 0 1-10 0c0-2 3-5 5-8Z"/></svg>Насыщенность</label><output id="o-sat" class="mono"></output><input id="sat" type="range" min="-50" max="50" step="1"></div>
+        <div class="row"><label for="warm"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3a2 2 0 0 1 4 0v6a3.5 3.5 0 1 1-4 0Zm2-4v6"/></svg>Теплота</label><output id="o-warm" class="mono"></output><input id="warm" type="range" min="-50" max="50" step="1"></div>
         <button class="linkbtn" id="resetColor" type="button">Сбросить цвет</button>
       </section>
 
       <section class="sec">
-        <h2 class="label">Значок техникума</h2>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="m1 6 7-4 7 4-7 4zM4 8v4c2 2 6 2 8 0V8"/></svg>Значок техникума</span></h2>
         <label class="check"><input id="logoOn" type="checkbox"> Значок на каждом кадре</label>
         <div class="logoBox">
           <canvas id="logoPrev" width="112" height="112" hidden></canvas>
@@ -391,7 +393,7 @@ body.crop-open { overflow: hidden; }
       </section>
 
       <section class="sec">
-        <h2 class="label">Знак МЕДИА ККТ</h2>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M2 8h12M2 12h7"/></svg>Знак МЕДИА ККТ</span></h2>
         <label class="check"><input id="mkOn" type="checkbox"> Незаметный знак «МЕДИА ККТ»</label>
         <div class="fields2">
           <div class="field"><label for="mkPos">Где</label>
@@ -409,7 +411,7 @@ body.crop-open { overflow: hidden; }
       </section>
 
       <section class="sec">
-        <h2 class="label">Свой ник</h2>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M8 4v9m-3 0h6"/></svg>Свой ник</span></h2>
         <label class="check"><input id="wmOn" type="checkbox"> Ник или подпись на каждом кадре</label>
         <div class="field"><label for="wmText">Текст</label><input id="wmText" type="text" maxlength="40" placeholder="@твой_ник" autocomplete="off"></div>
         <div class="fields2">
@@ -427,7 +429,7 @@ body.crop-open { overflow: hidden; }
       </section>
 
       <section class="sec">
-        <h2 class="label">Сохранение</h2>
+        <h2 class="label"><span class="setting-label"><svg class="setting-icon" aria-hidden="true" focusable="false" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8m-3-3 3 3 3-3M2 11v3h12v-3"/></svg>Сохранение</span></h2>
         <div class="row"><label for="quality">Качество JPG</label><output id="o-quality" class="mono"></output><input id="quality" type="range" min="70" max="100" step="1"></div>
         <p class="hint">92 подходит почти всегда. Ниже получатся файлы полегче.</p>
       </section>
@@ -2001,16 +2003,33 @@ body.crop-open { overflow: hidden; }
       const i = l.querySelector('input'); i.checked = i.value === S.mode; l.classList.toggle('on', i.checked);
     });
     document.querySelectorAll('#styles .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === S.style)));
-    $('o-auto').textContent = S.auto + '%';
-    $('o-bright').textContent = signed(S.bright); $('o-con').textContent = signed(S.con);
-    $('o-sat').textContent = signed(S.sat); $('o-warm').textContent = signed(S.warm);
-    $('o-wmSize').textContent = S.wmSize + '%'; $('o-quality').textContent = S.quality;
-    $('o-logoSize').textContent = S.logoSize + '%'; $('o-logoOpacity').textContent = S.logoOpacity + '%'; $('o-mkOpacity').textContent = S.mkOpacity + '%';
-    $('o-sharp').textContent = S.sharp + '%'; $('o-shadow').textContent = S.shadow + '%'; $('o-denoise').textContent = S.denoise + '%'; $('o-nature').textContent = S.nature + '%';
+    for (const key of rangeOutputs) syncRangeOutput(key);
   }
+  const rangeOutputs = ['auto', 'bright', 'con', 'sat', 'warm', 'wmSize', 'quality',
+    'logoSize', 'logoOpacity', 'mkOpacity', 'sharp', 'shadow', 'denoise', 'nature'];
+  function syncRangeOutput(key) {
+    const value = S[key];
+    $('o-' + key).textContent = key === 'quality' ? value
+      : ['bright', 'con', 'sat', 'warm'].includes(key) ? signed(value) : value + '%';
+  }
+  let rangeSave = 0;
+  function persistRange() {
+    if (!rangeSave) return;
+    clearTimeout(rangeSave);
+    rangeSave = 0;
+    saveSettings();
+  }
+  window.addEventListener('pagehide', persistRange);
   function bindRange(id, key) {
     const n = $(id); n.value = S[key];
-    n.addEventListener('input', () => { S[key] = parseFloat(n.value); syncUI(); saveSettings(); schedule(null); });
+    n.addEventListener('input', () => {
+      S[key] = parseFloat(n.value);
+      syncRangeOutput(key);
+      clearTimeout(rangeSave);
+      rangeSave = setTimeout(persistRange, 150);
+      if (key !== 'quality') schedule(null);
+    });
+    n.addEventListener('change', persistRange);
   }
   function initPanel() {
     buildFormats(); buildStyles();
